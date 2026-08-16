@@ -421,3 +421,15 @@
 @media (max-width: 900px) {
   .content-grid { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 600px) {
+  .page-header { flex-direction: column; }
+  .page-header .btn { width: 100%; justify-content: center; }
+  .page-title { font-size: var(--font-size-lg); }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .app-content { padding: var(--space-4) var(--space-3); }
+}
+
+@media (max-width: 400px) {
+  .stats-grid { grid-template-columns: 1fr; }
+}

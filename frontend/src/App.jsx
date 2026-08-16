@@ -12,6 +12,7 @@ const ChangePassword = lazy(() => import('./components/ChangePassword'));
 const CenterHeadDashboard = lazy(() => import('./pages/centerHead/CenterHeadDashboard'));
 const CenterHeadRequirements = lazy(() => import('./pages/centerHead/RequirementsList'));
 const NewRequirement = lazy(() => import('./pages/centerHead/NewRequirement'));
+const ResubmitRequirement = lazy(() => import('./pages/centerHead/ResubmitRequirement'));
 
 // ── Cluster Manager ──
 const ClusterDashboard = lazy(() => import('./pages/clusterManager/ClusterDashboard'));
@@ -91,6 +92,7 @@ const App = () => (
             <Route index element={<CenterHeadDashboard />} />
             <Route path="requirements" element={<CenterHeadRequirements />} />
             <Route path="new-requirement" element={<NewRequirement />} />
+            <Route path="requirements/:id/resubmit" element={<ResubmitRequirement />} />
             <Route path="stock" element={<StockPage />} />
           </Route>
 

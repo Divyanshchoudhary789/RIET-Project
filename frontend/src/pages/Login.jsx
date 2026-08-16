@@ -65,6 +65,22 @@ const Login = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // OTP resend timer
+  const [resendTimer, setResendTimer] = useState(0);
+  const timerRef = React.useRef(null);
+
+  const startResendTimer = () => {
+    setResendTimer(60);
+    timerRef.current = setInterval(() => {
+      setResendTimer((t) => {
+        if (t <= 1) { clearInterval(timerRef.current); return 0; }
+        return t - 1;
+      });
+    }, 1000);
+  };
+
+  React.useEffect(() => () => clearInterval(timerRef.current), []);
+
   // Already logged in → redirect
   useEffect(() => {
     if (!loading && user) {
@@ -96,6 +112,7 @@ const Login = () => {
       await forgotPassword(fpEmail);
       setSuccess('If that email exists, an OTP has been sent.');
       setStep('forgot-otp');
+      startResendTimer();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -234,6 +251,21 @@ const Login = () => {
                 <div className="auth-field">
                   <label className="auth-label">OTP</label>
                   <OtpInput length={6} value={otp} onChange={setOtp} />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                    {resendTimer > 0 ? (
+                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Resend in {resendTimer}s</span>
+                    ) : (
+                      <button type="button" className="auth-forgot-link" style={{ marginTop: 0 }}
+                        onClick={async () => {
+                          setError(''); setSubmitting(true);
+                          try { await forgotPassword(fpEmail); setSuccess('New OTP sent.'); startResendTimer(); }
+                          catch (e) { setError(getErrorMessage(e)); }
+                          finally { setSubmitting(false); }
+                        }} disabled={submitting}>
+                        Resend OTP
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="auth-field">
                   <label className="auth-label" htmlFor="new-pw">New Password</label>
@@ -265,36 +297,61 @@ const Login = () => {
             <>
               <h1 className="auth-form-title">Change your password</h1>
               <p className="auth-form-subtitle">You must set a new password before accessing the platform.</p>
-              <div className="auth-info-box" style={{ marginBottom: 20 }}>
-                Password must be at least 8 characters with uppercase, lowercase, digit and special character.
-              </div>
-              {error && <div className="alert alert-error" style={{ marginBottom: 20 }}>{error}</div>}
-              {success && <div className="alert alert-success" style={{ marginBottom: 20 }}>{success}</div>}
-              <form className="auth-form" onSubmit={handleChangeRequired}>
-                <div className="auth-field">
-                  <label className="auth-label" htmlFor="cur-pw">Current Password</label>
-                  <input id="cur-pw" className="auth-input" type="password" value={currentPw}
-                    onChange={(e) => { setCurrentPw(e.target.value); clearError(); }} placeholder="Temporary password" disabled={submitting} />
+
+              {success ? (
+                /* ── Success state: show message + go to login button ── */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 8 }}>
+                  <div className="alert alert-success">{success}</div>
+                  <button
+                    type="button"
+                    className="auth-submit"
+                    onClick={() => {
+                      setStep('login');
+                      setSuccess('');
+                      setCurrentPw('');
+                      setNewPw('');
+                      setConfirmPw('');
+                      setEmail('');
+                      setPassword('');
+                    }}
+                  >
+                    Go to Sign In
+                  </button>
                 </div>
-                <div className="auth-field">
-                  <label className="auth-label" htmlFor="new-pw2">New Password</label>
-                  <div className="auth-password-wrap">
-                    <input id="new-pw2" className="auth-input" type={showPw ? 'text' : 'password'} value={newPw}
-                      onChange={(e) => { setNewPw(e.target.value); clearError(); }} placeholder="Min 8 characters" disabled={submitting} />
-                    <button type="button" className="auth-pw-toggle" onClick={() => setShowPw((p) => !p)}>
-                      {showPw ? <EyeOff size={17} /> : <Eye size={17} />}
-                    </button>
+              ) : (
+                /* ── Form state ── */
+                <>
+                  <div className="auth-info-box" style={{ marginBottom: 20 }}>
+                    Password must be at least 8 characters with uppercase, lowercase, digit and special character.
                   </div>
-                </div>
-                <div className="auth-field">
-                  <label className="auth-label" htmlFor="confirm-pw2">Confirm New Password</label>
-                  <input id="confirm-pw2" className="auth-input" type="password" value={confirmPw}
-                    onChange={(e) => { setConfirmPw(e.target.value); clearError(); }} placeholder="Re-enter new password" disabled={submitting} />
-                </div>
-                <button type="submit" className="auth-submit" disabled={submitting}>
-                  {submitting ? <span className="spinner spinner-sm" /> : 'Set New Password'}
-                </button>
-              </form>
+                  {error && <div className="alert alert-error" style={{ marginBottom: 20 }}>{error}</div>}
+                  <form className="auth-form" onSubmit={handleChangeRequired}>
+                    <div className="auth-field">
+                      <label className="auth-label" htmlFor="cur-pw">Current Password</label>
+                      <input id="cur-pw" className="auth-input" type="password" value={currentPw}
+                        onChange={(e) => { setCurrentPw(e.target.value); clearError(); }} placeholder="Temporary password" disabled={submitting} />
+                    </div>
+                    <div className="auth-field">
+                      <label className="auth-label" htmlFor="new-pw2">New Password</label>
+                      <div className="auth-password-wrap">
+                        <input id="new-pw2" className="auth-input" type={showPw ? 'text' : 'password'} value={newPw}
+                          onChange={(e) => { setNewPw(e.target.value); clearError(); }} placeholder="Min 8 characters" disabled={submitting} />
+                        <button type="button" className="auth-pw-toggle" onClick={() => setShowPw((p) => !p)}>
+                          {showPw ? <EyeOff size={17} /> : <Eye size={17} />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="auth-field">
+                      <label className="auth-label" htmlFor="confirm-pw2">Confirm New Password</label>
+                      <input id="confirm-pw2" className="auth-input" type="password" value={confirmPw}
+                        onChange={(e) => { setConfirmPw(e.target.value); clearError(); }} placeholder="Re-enter new password" disabled={submitting} />
+                    </div>
+                    <button type="submit" className="auth-submit" disabled={submitting}>
+                      {submitting ? <span className="spinner spinner-sm" /> : 'Set New Password'}
+                    </button>
+                  </form>
+                </>
+              )}
             </>
           )}
 

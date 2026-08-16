@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Bell, ChevronDown, LayoutDashboard, LogOut, Menu, X,
   FilePlus2, FileText, Users, Building2, Briefcase,
@@ -122,11 +122,20 @@ const NotificationPanel = ({ onClose }) => {
 const AppLayout = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const navItems = NAV_CONFIG[user?.role] || [];
+
+  // Derive topbar title reactively from current pathname
+  const currentTitle = (() => {
+    const path = location.pathname;
+    // exact match first
+    const exact = navItems.find((n) => n.end ? path === n.path : path.startsWith(n.path));
+    return exact?.label || 'Dashboard';
+  })();
 
   useEffect(() => {
     const fetchCount = async () => {
@@ -213,7 +222,7 @@ const AppLayout = () => {
           </button>
 
           <div className="topbar-title">
-            {navItems.find((n) => n.path === window.location.pathname)?.label || 'Dashboard'}
+            {currentTitle}
           </div>
 
           <div className="topbar-actions">

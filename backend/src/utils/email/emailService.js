@@ -35,15 +35,22 @@ const getTransporter = () => {
  */
 const sendEmail = async (to, subject, html) => {
   const transport = getTransporter();
-  if (!transport) return;
+  if (!transport) {
+    console.warn('[Email] Skipped — SMTP not configured.');
+    return;
+  }
 
-  const from = `"${process.env.EMAIL_FROM_NAME || 'RIET Platform'}" <${process.env.SMTP_USER}>`;
+  // EMAIL_FROM should be a verified sender address in Brevo (not the SMTP login username)
+  // e.g. EMAIL_FROM=noreply@yourdomain.com  or your verified Gmail/domain
+  const senderAddress = process.env.EMAIL_FROM || process.env.SMTP_USER;
+  const from = `"${process.env.EMAIL_FROM_NAME || 'RIET Platform'}" <${senderAddress}>`;
 
   try {
-    await transport.sendMail({ from, to, subject, html });
+    const info = await transport.sendMail({ from, to, subject, html });
+    console.log(`[Email] Sent to ${to} | Subject: "${subject}" | MessageId: ${info.messageId}`);
   } catch (err) {
     // Log but do not throw — email failures must not break the primary workflow
-    console.error(`Email send failed to ${to}: ${err.message}`);
+    console.error(`[Email] Failed to send to ${to} | Subject: "${subject}" | Error: ${err.message}`);
   }
 };
 
