@@ -1,0 +1,108 @@
+:root {
+  /* Brand colors */
+  --color-primary: #1a2b4a;
+  --color-primary-light: #243558;
+  --color-primary-dark: #111e34;
+  --color-accent: #2563eb;
+  --color-accent-light: #3b82f6;
+  --color-accent-hover: #1d4ed8;
+
+  /* Semantic colors */
+  --color-success: #16a34a;
+  --color-success-bg: #f0fdf4;
+  --color-success-border: #86efac;
+  --color-warning: #d97706;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fcd34d;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fca5a5;
+  --color-info: #0891b2;
+  --color-info-bg: #f0f9ff;
+  --color-info-border: #7dd3fc;
+
+  /* Neutrals */
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-border-light: #f1f5f9;
+
+  /* Text */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-inverse: #ffffff;
+
+  /* Status badge colors */
+  --status-submitted: #2563eb;
+  --status-submitted-bg: #eff6ff;
+  --status-forwarded: #7c3aed;
+  --status-forwarded-bg: #f5f3ff;
+  --status-rejected: #dc2626;
+  --status-rejected-bg: #fef2f2;
+  --status-approved: #16a34a;
+  --status-approved-bg: #f0fdf4;
+  --status-revised: #d97706;
+  --status-revised-bg: #fffbeb;
+  --status-closed: #64748b;
+  --status-closed-bg: #f8fafc;
+  --status-under_review: #0891b2;
+  --status-under_review-bg: #f0f9ff;
+
+  /* Priority colors */
+  --priority-low: #64748b;
+  --priority-low-bg: #f8fafc;
+  --priority-medium: #d97706;
+  --priority-medium-bg: #fffbeb;
+  --priority-high: #dc2626;
+  --priority-high-bg: #fef2f2;
+  --priority-urgent: #9333ea;
+  --priority-urgent-bg: #faf5ff;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+
+  /* Sidebar */
+  --sidebar-width: 240px;
+  --header-height: 64px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Font */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-base: 14px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 22px;
+  --font-size-2xl: 28px;
+  --font-size-3xl: 36px;
+}

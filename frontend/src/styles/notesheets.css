@@ -1,0 +1,390 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@300;400;500;600;700&display=swap");
+
+/* =========================================================
+   BASE
+   ========================================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+
+  background: #fcfaf6;
+
+  font-family: "Inter", sans-serif;
+
+  color: #172b52;
+}
+
+/* =========================================================
+   PAGE LAYOUT
+   ========================================================= */
+
+.rh-layout {
+  min-height: 100vh;
+
+  background: #fcfaf6;
+}
+
+/*
+  Sidebar is fixed.
+  Therefore content starts exactly after 314px.
+*/
+
+.notes-main {
+  flex: 1;
+  margin-left: 0;
+  background: #F7F5F2;
+  min-height: 100vh;
+  padding: 48px 48px 32px;
+  max-width: none;
+  min-width: 0;
+}
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.notes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 32px;
+  margin-bottom: 34px;
+}
+.notes-header > div:first-child {
+  min-width: 0;
+}
+
+.notes-label {
+  margin: 0 0 10px;
+
+  color: #c6922e;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  letter-spacing: 4px;
+  line-height: 1.2;
+}
+
+.notes-title {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 46px;
+  font-weight: 500;
+  color: #16274D;
+  line-height: 1.05;
+  margin-bottom: 8px;
+}
+
+.notes-subtitle {
+  font-size: 18px;
+  color: #6B7280;
+  line-height: 1.45;
+  max-width: 780px;
+}
+
+/* =========================================================
+   HEADER ACTIONS
+   ========================================================= */
+
+.notes-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+.filter-btn {
+  width: 236px;
+  height: 46px;
+  background: #fff;
+  border: 1px solid #E5E1D9;
+  border-radius: 12px;
+  padding: 0 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: "Inter", sans-serif;
+  font-size: 16px;
+  color: #16274D;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.filter-btn svg {
+  width: 18px;
+  height: 18px;
+
+  stroke-width: 1.8;
+}
+
+.filter-btn:hover {
+  border-color: #d8d0c5;
+}
+
+
+.log-btn {
+  width: 188px;
+  height: 46px;
+  background: #16274D;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 9px;
+  font-family: "Inter", sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.log-btn svg {
+  width: 18px;
+  height: 18px;
+
+  stroke-width: 1.8;
+}
+
+.log-btn:hover {
+  background: #0f1d3d;
+}
+/* =========================================================
+   MAIN CARD
+   ========================================================= */
+
+.notes-card {
+  background: #fff;
+  border-radius: 20px;
+  border: 1px solid #ECE7DF;
+  min-height: 276px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* =========================================================
+   EMPTY STATE
+   ========================================================= */
+
+.empty-state {
+  text-align: center;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.empty-state svg {
+  color: #626B78;
+  margin-bottom: 16px;
+}
+
+.empty-state h3 {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 27px;
+  font-weight: 500;
+  color: #16274D;
+  line-height: 1.2;
+  margin-bottom: 10px;
+}
+.empty-state p {
+  color: #6E7786;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+/* =========================================================
+   NON-EMPTY NOTESHEET LIST
+   ========================================================= */
+
+.notes-list {
+  width: 100%;
+
+  display: flex;
+  flex-direction: column;
+}
+
+.notes-list-row {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 16px;
+
+  padding: 18px 8px;
+
+  border-bottom: 1px solid #ebe7df;
+}
+
+.notes-list-row:last-child {
+  border-bottom: 0;
+}
+
+.notes-list-title {
+  color: #172b52;
+
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.notes-list-meta {
+  margin-top: 5px;
+
+  color: #7c899e;
+
+  font-size: 14px;
+}
+
+.notes-status-pill {
+  flex-shrink: 0;
+
+  padding: 6px 14px;
+
+  border-radius: 999px;
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.notes-status-pending {
+  background: #fdf1dc;
+  color: #b3760f;
+}
+
+.notes-status-approved {
+  background: #e3f3e9;
+  color: #1f8a4c;
+}
+
+.notes-status-rejected {
+  background: #fbe6e6;
+  color: #c23f3f;
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 1100px) {
+  .notes-main {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+
+  .notes-header {
+    flex-direction: column;
+  }
+
+  .notes-actions {
+    margin-top: 10px;
+  }
+}
+
+@media (max-width: 900px) {
+  .notes-main {
+    width: 100%;
+    margin-left: 0;
+
+    padding: 32px 24px;
+  }
+
+  .notes-title {
+    font-size: 38px;
+  }
+
+  .notes-actions {
+    width: 100%;
+  }
+
+  .filter-btn,
+  .log-btn {
+    flex: 1;
+  }
+}
+
+@media (max-width: 600px) {
+  .notes-main {
+    padding: 28px 18px;
+  }
+
+  .notes-title {
+    font-size: 34px;
+  }
+
+  .notes-subtitle {
+    font-size: 16px;
+  }
+
+  .notes-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-btn,
+  .log-btn {
+    width: 100%;
+  }
+
+  .notes-card {
+    min-height: 250px;
+    padding: 30px 20px;
+  }
+   @media (max-width: 1000px) {
+  .notes-main {
+    padding: 40px 32px 32px;
+  }
+
+  .notes-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .notes-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 700px) {
+  .notes-main {
+    padding: 28px 20px 28px;
+  }
+
+  .notes-title {
+    font-size: 38px;
+  }
+
+  .notes-subtitle {
+    font-size: 16px;
+  }
+
+  .notes-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .filter-btn,
+  .log-btn {
+    width: 100%;
+  }
+
+  .notes-card {
+    min-height: 260px;
+  }
+}
+}
