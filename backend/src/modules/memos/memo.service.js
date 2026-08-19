@@ -1,5 +1,8 @@
 const Memo = require('./memo.model');
 const Notesheet = require('../notesheets/notesheet.model');
+const Assessment = require('../assessments/assessment.model');
+const WorkProposal = require('../proposals/workProposal.model');
+const Requirement = require('../requirements/requirement.model');
 const User = require('../users/user.model');
 const { buildTimelineEntry } = require('../../utils/timeline');
 const { createNotification, notifyMany } = require('../notifications/notification.service');
@@ -205,6 +208,32 @@ const decideMemo = async (memoId, action, note, chairperson) => {
     memo.decidedBy = chairperson._id;
     memo.decidedAt = new Date();
     memo.timeline.push(buildTimelineEntry(chairperson, TIMELINE_ACTIONS.APPROVED, note || ''));
+
+    // Trace back through the chain: memo → notesheet → assessment → workProposal → requirements
+    // and mark all linked requirements as CLOSED (final state after chairperson approval)
+    try {
+      const notesheet = await Notesheet.findById(memo.notesheetRef).lean();
+      if (notesheet?.assessmentRef) {
+        const assessment = await Assessment.findById(notesheet.assessmentRef).lean();
+        if (assessment?.workProposalRef) {
+          const workProposal = await WorkProposal.findById(assessment.workProposalRef).lean();
+          if (workProposal?.requirementRefs?.length) {
+            await Requirement.updateMany(
+              { _id: { $in: workProposal.requirementRefs } },
+              {
+                $set: { status: DOCUMENT_STATUS.CLOSED },
+                $push: {
+                  timeline: buildTimelineEntry(chairperson, TIMELINE_ACTIONS.APPROVED, 'Memo approved by Chairperson'),
+                },
+              }
+            );
+          }
+        }
+      }
+    } catch (_err) {
+      // Non-critical — log but don't fail the memo approval
+      console.error('[decideMemo] Failed to close linked requirements:', _err.message);
+    }
 
     const accountsUsers = await User.find({ role: ROLES.ACCOUNTS, isActive: true });
     await notifyMany(accountsUsers, {

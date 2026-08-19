@@ -36,6 +36,7 @@ const TIMELINE_ACTIONS = {
   REVISED: 'Revised',
   CREATED: 'Created',
   RECEIVED: 'Received',
+  CLOSED: 'Closed',
 };
 
 const PRIORITY_LEVELS = {
@@ -71,10 +72,14 @@ const TOKEN_EXPIRY = {
 };
 
 const RATE_LIMIT = {
-  AUTH_WINDOW_MS: 15 * 60 * 1000,
-  AUTH_MAX_REQUESTS: 10,
-  GLOBAL_WINDOW_MS: 15 * 60 * 1000,
-  GLOBAL_MAX_REQUESTS: 200,
+  // Set RATE_LIMIT_ENABLED=false in .env to disable rate limiting in development
+  ENABLED: process.env.RATE_LIMIT_ENABLED !== 'false',
+
+  AUTH_WINDOW_MS: parseInt(process.env.RATE_LIMIT_AUTH_WINDOW_MS, 10) || 15 * 60 * 1000,
+  AUTH_MAX_REQUESTS: parseInt(process.env.RATE_LIMIT_AUTH_MAX, 10) || 10,
+
+  GLOBAL_WINDOW_MS: parseInt(process.env.RATE_LIMIT_GLOBAL_WINDOW_MS, 10) || 15 * 60 * 1000,
+  GLOBAL_MAX_REQUESTS: parseInt(process.env.RATE_LIMIT_GLOBAL_MAX, 10) || 200,
 };
 
 const MAX_LOGIN_ATTEMPTS = 5;

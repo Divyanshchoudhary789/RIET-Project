@@ -28,6 +28,18 @@ router.get(
 );
 
 router.get(
+  '/:id/chain',
+  authorize(
+    ROLES.CENTER_HEAD,
+    ROLES.CLUSTER_MANAGER,
+    ROLES.DIRECTOR,
+    ROLES.CHAIRPERSON,
+    ROLES.DEPARTMENT_ADMIN
+  ),
+  requirementController.getRequirementChain
+);
+
+router.get(
   '/:id',
   authorize(
     ROLES.CENTER_HEAD,

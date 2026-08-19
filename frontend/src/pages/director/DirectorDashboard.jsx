@@ -27,9 +27,9 @@ const DirectorDashboard = () => {
           notesheets: Array.isArray(nsData) ? nsData : (nsData?.notesheets || []),
         });
         setStats({
-          assessments: aRes.data.total || 0,
-          notesheets: nsRes.data.total || 0,
-          users: usersRes.data.total || 0,
+          assessments: aRes.data.meta?.total || aRes.data.total || 0,
+          notesheets: nsRes.data.meta?.total || nsRes.data.total || 0,
+          users: usersRes.data.meta?.total || usersRes.data.total || 0,
         });
       } catch (err) {
         setError(getErrorMessage(err));

@@ -118,7 +118,11 @@ const RequirementsList = () => {
               ) : items.map((req) => (
                 <tr key={req._id}>
                   <td style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>{req.referenceNumber || req._id?.slice(-8)}</td>
-                  <td>{req.campus?.name || '—'}</td>
+                  <td>
+                    {req.campusRef?.name
+                      ? <span style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>{req.campusRef.name}</span>
+                      : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                  </td>
                   <td><span className={`badge badge-${req.priority?.toLowerCase()}`}>{req.priority}</span></td>
                   <td><span className={`badge ${getStatusClass(req.status)}`}>{req.status}</span></td>
                   <td>{formatDate(req.createdAt)}</td>

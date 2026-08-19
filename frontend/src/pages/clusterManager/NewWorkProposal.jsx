@@ -24,11 +24,13 @@ const NewWorkProposal = () => {
     const load = async () => {
       try {
         const [reqRes, deptRes] = await Promise.all([
-          api.get('/api/requirements?status=submitted&limit=100'),
+          api.get('/api/requirements?limit=100'),
           api.get('/api/departments?limit=100'),
         ]);
         const reqs = reqRes.data.data;
-        setRequirements(Array.isArray(reqs) ? reqs : (reqs?.requirements || []));
+        const allReqs = Array.isArray(reqs) ? reqs : (reqs?.requirements || []);
+        // Only show requirements that can be included in a proposal
+        setRequirements(allReqs.filter((r) => r.status === 'submitted' || r.status === 'revised'));
         const depts = deptRes.data.data;
         setDepartments(Array.isArray(depts) ? depts : (depts?.departments || []));
       } catch (err) {
@@ -61,7 +63,7 @@ const NewWorkProposal = () => {
         title: title.trim(),
         description: description.trim() || undefined,
         requirementRefs: selectedReqs,
-        departments: selectedDepts,
+        departmentRefs: selectedDepts,
       });
       navigate('/cluster-manager/proposals');
     } catch (err) {
@@ -118,7 +120,7 @@ const NewWorkProposal = () => {
                   />
                   <span style={{ flex:1, fontSize:13 }}>
                     <strong>{req.referenceNumber || req._id?.slice(-8)}</strong>
-                    {req.campus?.name && <span style={{ color:'var(--color-text-muted)', marginLeft:8 }}>{req.campus.name}</span>}
+                    {req.campusRef?.name && <span style={{ color:'var(--color-text-muted)', marginLeft:8 }}>{req.campusRef.name}</span>}
                   </span>
                   <span className={`badge badge-${req.priority?.toLowerCase()}`}>{req.priority}</span>
                 </label>

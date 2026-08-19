@@ -6,10 +6,11 @@ const ACTION_CONFIG = {
   Submitted:  { icon: ArrowRight,   color: '#2563eb', label: 'Submitted' },
   Forwarded:  { icon: ArrowRight,   color: '#7c3aed', label: 'Forwarded' },
   Rejected:   { icon: XCircle,      color: '#dc2626', label: 'Rejected' },
-  Approved:   { icon: Award,        color: '#16a34a', label: 'Approved' },
+  Approved:   { icon: CheckCircle2, color: '#16a34a', label: 'Approved' },
   Revised:    { icon: RefreshCw,    color: '#d97706', label: 'Revised' },
   Created:    { icon: ArrowRight,   color: '#2563eb', label: 'Created' },
   Received:   { icon: Package,      color: '#16a34a', label: 'Received' },
+  Closed:     { icon: CheckCircle2, color: '#0f766e', label: 'Closed' },
 };
 
 const Timeline = ({ entries = [] }) => {

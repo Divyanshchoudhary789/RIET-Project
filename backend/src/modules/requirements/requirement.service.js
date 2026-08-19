@@ -1,4 +1,8 @@
 const Requirement = require('./requirement.model');
+const WorkProposal = require('../proposals/workProposal.model');
+const Assessment = require('../assessments/assessment.model');
+const Notesheet = require('../notesheets/notesheet.model');
+const Memo = require('../memos/memo.model');
 const User = require('../users/user.model');
 const { buildTimelineEntry } = require('../../utils/timeline');
 const { createNotification } = require('../notifications/notification.service');
@@ -31,6 +35,7 @@ const listRequirements = async (user, query) => {
       .populate('campusRef', 'name code')
       .populate('createdBy', 'name email role')
       .populate({ path: 'timeline.actor', select: 'name email role' })
+      .populate('workProposalRef', 'title status')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),
@@ -205,6 +210,125 @@ const getDashboardStats = async (user) => {
   return { total, submitted, underReview, rejected, closed, recent };
 };
 
+/**
+ * Returns the full approval chain for a requirement:
+ * requirement → workProposal → assessment → notesheet → memo
+ * Used by the frontend to display the complete approval journey.
+ */
+const getRequirementChain = async (requirementId, user) => {
+  const requirement = await Requirement.findById(requirementId)
+    .populate('campusRef', 'name code')
+    .populate('createdBy', 'name email role')
+    .populate({ path: 'timeline.actor', select: 'name email role' });
+
+  if (!requirement) {
+    const error = new Error('Requirement not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (user.role === ROLES.CENTER_HEAD && requirement.campusRef._id.toString() !== user.scopeRef.toString()) {
+    const error = new Error('You do not have access to this requirement.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const chain = {
+    requirement: {
+      _id: requirement._id,
+      status: requirement.status,
+      timeline: requirement.timeline,
+    },
+    workProposal: null,
+    assessment: null,
+    notesheet: null,
+    memo: null,
+  };
+
+  if (!requirement.workProposalRef) return chain;
+
+  const workProposal = await WorkProposal.findById(requirement.workProposalRef)
+    .populate('createdBy', 'name role')
+    .populate({ path: 'timeline.actor', select: 'name email role' })
+    .lean();
+
+  if (!workProposal) return chain;
+
+  chain.workProposal = {
+    _id: workProposal._id,
+    title: workProposal.title,
+    status: workProposal.status,
+    createdBy: workProposal.createdBy,
+    createdAt: workProposal.createdAt,
+    timeline: workProposal.timeline,
+  };
+
+  if (!workProposal.assessmentRef) return chain;
+
+  const assessment = await Assessment.findById(workProposal.assessmentRef)
+    .populate('createdBy', 'name role')
+    .populate('departmentRef', 'name')
+    .populate({ path: 'timeline.actor', select: 'name email role' })
+    .lean();
+
+  if (!assessment) return chain;
+
+  chain.assessment = {
+    _id: assessment._id,
+    status: assessment.status,
+    estimatedCost: assessment.estimatedCost,
+    feasibilityNotes: assessment.feasibilityNotes,
+    recommendedAction: assessment.recommendedAction,
+    createdBy: assessment.createdBy,
+    departmentRef: assessment.departmentRef,
+    createdAt: assessment.createdAt,
+    timeline: assessment.timeline,
+  };
+
+  if (!assessment.notesheetRef) return chain;
+
+  const notesheet = await Notesheet.findById(assessment.notesheetRef)
+    .populate('createdBy', 'name role')
+    .populate({ path: 'timeline.actor', select: 'name email role' })
+    .lean();
+
+  if (!notesheet) return chain;
+
+  chain.notesheet = {
+    _id: notesheet._id,
+    status: notesheet.status,
+    quotations: notesheet.quotations,
+    createdBy: notesheet.createdBy,
+    createdAt: notesheet.createdAt,
+    timeline: notesheet.timeline,
+  };
+
+  if (!notesheet.memoRef) return chain;
+
+  const memo = await Memo.findById(notesheet.memoRef)
+    .populate('createdBy', 'name role')
+    .populate('decidedBy', 'name role')
+    .populate({ path: 'timeline.actor', select: 'name email role' })
+    .lean();
+
+  if (!memo) return chain;
+
+  chain.memo = {
+    _id: memo._id,
+    status: memo.status,
+    summary: memo.summary,
+    recommendedVendor: memo.recommendedVendor,
+    decisionNote: memo.decisionNote,
+    createdBy: memo.createdBy,
+    decidedBy: memo.decidedBy,
+    decidedAt: memo.decidedAt,
+    createdAt: memo.createdAt,
+    timeline: memo.timeline,
+  };
+
+  return chain;
+};
+
 module.exports = {
   listRequirements,
   getRequirementById,
@@ -212,4 +336,5 @@ module.exports = {
   rejectRequirement,
   resubmitRequirement,
   getDashboardStats,
+  getRequirementChain,
 };

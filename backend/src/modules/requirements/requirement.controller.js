@@ -55,6 +55,15 @@ const getDashboardStats = async (req, res, next) => {
   }
 };
 
+const getRequirementChain = async (req, res, next) => {
+  try {
+    const chain = await requirementService.getRequirementChain(req.params.id, req.user);
+    return sendSuccess(res, 200, 'Requirement chain retrieved.', chain);
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   listRequirements,
   getRequirementById,
@@ -62,4 +71,5 @@ module.exports = {
   rejectRequirement,
   resubmitRequirement,
   getDashboardStats,
+  getRequirementChain,
 };

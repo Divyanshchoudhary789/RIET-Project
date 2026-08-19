@@ -60,25 +60,29 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Sanitize NoSQL injection attempts
 app.use(mongoSanitize());
 
-// Global rate limiter
-app.use(
-  rateLimit({
-    windowMs: RATE_LIMIT.GLOBAL_WINDOW_MS,
-    max: RATE_LIMIT.GLOBAL_MAX_REQUESTS,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { success: false, message: 'Too many requests. Please try again later.' },
-  })
-);
+// Global rate limiter (disabled when RATE_LIMIT_ENABLED=false)
+if (RATE_LIMIT.ENABLED) {
+  app.use(
+    rateLimit({
+      windowMs: RATE_LIMIT.GLOBAL_WINDOW_MS,
+      max: RATE_LIMIT.GLOBAL_MAX_REQUESTS,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { success: false, message: 'Too many requests. Please try again later.' },
+    })
+  );
+}
 
-// Stricter rate limiter on auth routes
-const authLimiter = rateLimit({
-  windowMs: RATE_LIMIT.AUTH_WINDOW_MS,
-  max: RATE_LIMIT.AUTH_MAX_REQUESTS,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Too many authentication attempts. Please wait 15 minutes.' },
-});
+// Stricter rate limiter on auth routes (disabled when RATE_LIMIT_ENABLED=false)
+const authLimiter = RATE_LIMIT.ENABLED
+  ? rateLimit({
+      windowMs: RATE_LIMIT.AUTH_WINDOW_MS,
+      max: RATE_LIMIT.AUTH_MAX_REQUESTS,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { success: false, message: 'Too many authentication attempts. Please wait 15 minutes.' },
+    })
+  : (req, res, next) => next();
 
 // Health check (no auth, no rate limit)
 app.get('/api/health', (req, res) => {

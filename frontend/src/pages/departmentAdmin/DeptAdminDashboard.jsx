@@ -23,8 +23,8 @@ const DeptAdminDashboard = () => {
         const arr = Array.isArray(props) ? props : (props?.proposals || []);
         setProposals(arr.slice(0, 5));
         setStats({
-          proposals: propRes.data.total || arr.length,
-          assessments: assessRes.data.total || 0,
+          proposals: propRes.data.meta?.total || propRes.data.total || arr.length,
+          assessments: assessRes.data.meta?.total || assessRes.data.total || 0,
         });
       } catch (err) {
         setError(getErrorMessage(err));
