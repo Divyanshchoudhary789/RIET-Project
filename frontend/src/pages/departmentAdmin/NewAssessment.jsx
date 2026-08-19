@@ -25,9 +25,15 @@ const NewAssessment = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const r = await api.get('/api/work-proposals?status=submitted&limit=100');
-        const d = r.data.data;
-        setProposals(Array.isArray(d) ? d : (d?.proposals || []));
+        // Load both submitted and revised proposals (both are assessable states)
+        const [r1, r2] = await Promise.all([
+          api.get('/api/work-proposals?status=submitted&limit=100'),
+          api.get('/api/work-proposals?status=revised&limit=100'),
+        ]);
+        const extract = (r) => { const d = r.data.data; return Array.isArray(d) ? d : (d?.proposals || []); };
+        const all = [...extract(r1), ...extract(r2)];
+        const seen = new Set();
+        setProposals(all.filter((p) => { if (seen.has(p._id)) return false; seen.add(p._id); return true; }));
       } catch (err) {
         setError(getErrorMessage(err));
       } finally {

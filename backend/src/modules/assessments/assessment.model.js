@@ -64,4 +64,11 @@ assessmentSchema.index({ workProposalRef: 1 });
 assessmentSchema.index({ departmentRef: 1, status: 1 });
 assessmentSchema.index({ status: 1, createdAt: -1 });
 
+// Human-readable reference derived from _id
+assessmentSchema.virtual('referenceNumber').get(function () {
+  return `ASS-${this._id.toString().slice(-8).toUpperCase()}`;
+});
+assessmentSchema.set('toJSON', { virtuals: true });
+assessmentSchema.set('toObject', { virtuals: true });
+
 module.exports = mongoose.model('Assessment', assessmentSchema);

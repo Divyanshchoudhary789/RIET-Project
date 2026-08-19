@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FilePlus2, FileText, Clock, CheckCircle2, XCircle, Package } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import { formatDate, getErrorMessage, getStatusClass } from '../../utils/helpers';
+import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
 const CenterHeadDashboard = () => {
@@ -13,12 +14,23 @@ const CenterHeadDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    api.get('/api/requirements/dashboard-stats')
-      .then((r) => setStats(r.data.data))
-      .catch((e) => setError(getErrorMessage(e)))
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    try {
+      const r = await api.get('/api/requirements/dashboard-stats');
+      setStats(r.data.data);
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Re-fetch when any requirement or PO event touches this role
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (['requirement', 'purchaseOrder'].includes(payload?.entity)) load();
+  });
 
   return (
     <div>
@@ -89,19 +101,11 @@ const CenterHeadDashboard = () => {
           </div>
 
           <div className="panel">
-            <div className="panel-header">
-              <span className="panel-title">Quick Actions</span>
-            </div>
+            <div className="panel-header"><span className="panel-title">Quick Actions</span></div>
             <div className="panel-body" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <button className="btn btn-primary" onClick={() => navigate('/center-head/new-requirement')}>
-                <FilePlus2 size={16} /> New Requirement
-              </button>
-              <button className="btn btn-ghost" onClick={() => navigate('/center-head/requirements')}>
-                <FileText size={16} /> All Requirements
-              </button>
-              <button className="btn btn-ghost" onClick={() => navigate('/center-head/stock')}>
-                <Package size={16} /> View Stock
-              </button>
+              <button className="btn btn-primary" onClick={() => navigate('/center-head/new-requirement')}><FilePlus2 size={16} /> New Requirement</button>
+              <button className="btn btn-ghost" onClick={() => navigate('/center-head/requirements')}><FileText size={16} /> All Requirements</button>
+              <button className="btn btn-ghost" onClick={() => navigate('/center-head/stock')}><Package size={16} /> View Stock</button>
             </div>
           </div>
         </>

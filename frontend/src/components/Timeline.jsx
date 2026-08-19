@@ -42,12 +42,12 @@ const Timeline = ({ entries = [] }) => {
               <div className="timeline-action" style={{ color: config.color }}>
                 {config.label}
               </div>
-              <div className="timeline-actor">
+              <div className="timeline-actor" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                 {entry.actorRole || 'System'}
                 {entry.actor?.name && ` · ${entry.actor.name}`}
               </div>
               {entry.note && (
-                <div className="timeline-note">"{entry.note}"</div>
+                <div className="timeline-note" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>"{entry.note}"</div>
               )}
               <div className="timeline-time">{formatDateTime(entry.timestamp)}</div>
             </div>

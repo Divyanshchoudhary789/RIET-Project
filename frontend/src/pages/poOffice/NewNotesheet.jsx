@@ -27,9 +27,8 @@ const NewNotesheet = () => {
         const r = await api.get('/api/assessments?status=forwarded&limit=100');
         const list = Array.isArray(r.data.data) ? r.data.data : (r.data.data?.assessments || []);
         setAssessments(list);
-        if (!assessmentRef && list.length > 0) {
-          setAssessmentRef(list[0]._id);
-        }
+        // Only pre-select if nothing is already selected (avoid overwriting URL param)
+        setAssessmentRef((prev) => (prev ? prev : list[0]?._id || ''));
       } catch (err) {
         setError(getErrorMessage(err));
       } finally {
@@ -37,7 +36,8 @@ const NewNotesheet = () => {
       }
     };
     fetchForwardedAssessments();
-  }, [assessmentRef]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount only
 
   const handleQuotationChange = (index, field, value) => {
     setQuotations((prev) => {
@@ -77,15 +77,24 @@ const NewNotesheet = () => {
     for (let i = 0; i < quotations.length; i++) {
       const q = quotations[i];
       if (!q.vendorName.trim()) {
-        setError(`Vendor name is required for Quotation #${i + 1}.`);
+        setError(`Quotation #${i + 1}: Vendor name is required.`);
         return;
       }
       if (!q.amount || Number(q.amount) < 0) {
-        setError(`Valid amount is required for Quotation #${i + 1}.`);
+        setError(`Quotation #${i + 1}: Please enter a valid amount (₹0 or more).`);
         return;
       }
       if (!q.validity) {
-        setError(`Validity date is required for Quotation #${i + 1}.`);
+        setError(`Quotation #${i + 1}: Validity date is required.`);
+        return;
+      }
+      // Client-side date check — validity must be today or in the future
+      const selectedDate = new Date(q.validity);
+      selectedDate.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selectedDate < today) {
+        setError(`Quotation #${i + 1} — Validity Until: Date cannot be in the past. Please select today's date or a future date.`);
         return;
       }
     }
@@ -231,10 +240,14 @@ const NewNotesheet = () => {
                 <input
                   type="date"
                   className="form-input"
+                  min={new Date().toISOString().split('T')[0]}
                   value={q.validity}
                   onChange={(e) => handleQuotationChange(idx, 'validity', e.target.value)}
                   required
                 />
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                  Must be today or a future date
+                </span>
               </div>
             </div>
 

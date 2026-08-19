@@ -86,4 +86,11 @@ requirementSchema.index({ campusRef: 1, status: 1 });
 requirementSchema.index({ createdBy: 1 });
 requirementSchema.index({ status: 1, createdAt: -1 });
 
+// Human-readable reference derived from _id
+requirementSchema.virtual('referenceNumber').get(function () {
+  return `REQ-${this._id.toString().slice(-8).toUpperCase()}`;
+});
+requirementSchema.set('toJSON', { virtuals: true });
+requirementSchema.set('toObject', { virtuals: true });
+
 module.exports = mongoose.model('Requirement', requirementSchema);

@@ -3,33 +3,32 @@ const WorkProposal = require('../proposals/workProposal.model');
 const Assessment = require('../assessments/assessment.model');
 const Notesheet = require('../notesheets/notesheet.model');
 const Memo = require('../memos/memo.model');
+const PurchaseOrder = require('../purchaseOrders/purchaseOrder.model');
 const User = require('../users/user.model');
 const { buildTimelineEntry } = require('../../utils/timeline');
-const { createNotification } = require('../notifications/notification.service');
+const { createNotification, emitDashboardRefresh } = require('../notifications/notification.service');
 const { DOCUMENT_STATUS, TIMELINE_ACTIONS, ROLES } = require('../../config/constants');
 const { getPaginationParams, buildPaginationMeta } = require('../../utils/pagination');
 
 const buildFilter = (user, query) => {
   const filter = {};
-
-  // Center Head is always scoped to their own campus — cannot be overridden by query params
   if (user.role === ROLES.CENTER_HEAD) {
     filter.campusRef = user.scopeRef;
   } else {
-    // Other roles can optionally filter by campus
     if (query.campusRef) filter.campusRef = query.campusRef;
   }
-
   if (query.status) filter.status = query.status;
   if (query.priority) filter.priority = query.priority;
-
+  if (query.search) {
+    const regex = new RegExp(query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [{ justification: regex }];
+  }
   return filter;
 };
 
 const listRequirements = async (user, query) => {
   const { page, limit, skip } = getPaginationParams(query);
   const filter = buildFilter(user, query);
-
   const [requirements, total] = await Promise.all([
     Requirement.find(filter)
       .populate('campusRef', 'name code')
@@ -41,7 +40,6 @@ const listRequirements = async (user, query) => {
       .limit(limit),
     Requirement.countDocuments(filter),
   ]);
-
   return { requirements, meta: buildPaginationMeta(page, limit, total) };
 };
 
@@ -57,13 +55,11 @@ const getRequirementById = async (requirementId, user) => {
     error.statusCode = 404;
     throw error;
   }
-
   if (user.role === ROLES.CENTER_HEAD && requirement.campusRef._id.toString() !== user.scopeRef.toString()) {
     const error = new Error('You do not have access to this requirement.');
     error.statusCode = 403;
     throw error;
   }
-
   return requirement;
 };
 
@@ -85,7 +81,6 @@ const createRequirement = async (data, user) => {
     timeline: [buildTimelineEntry(user, TIMELINE_ACTIONS.SUBMITTED)],
   });
 
-  // Notify all Cluster Managers
   const clusterManagers = await User.find({ role: ROLES.CLUSTER_MANAGER, isActive: true });
   for (const cm of clusterManagers) {
     await createNotification({
@@ -101,6 +96,9 @@ const createRequirement = async (data, user) => {
     });
   }
 
+  // Refresh cluster manager dashboards
+  emitDashboardRefresh(ROLES.CLUSTER_MANAGER, 'requirement', { action: 'created', id: requirement._id });
+
   return requirement;
 };
 
@@ -113,7 +111,6 @@ const rejectRequirement = async (requirementId, note, clusterManager) => {
     error.statusCode = 404;
     throw error;
   }
-
   if (requirement.status !== DOCUMENT_STATUS.SUBMITTED && requirement.status !== DOCUMENT_STATUS.REVISED) {
     const error = new Error(`Cannot reject a requirement with status: ${requirement.status}`);
     error.statusCode = 400;
@@ -137,27 +134,28 @@ const rejectRequirement = async (requirementId, note, clusterManager) => {
     note,
   });
 
+  // Refresh center_head and cluster_manager dashboards
+  emitDashboardRefresh(
+    [ROLES.CENTER_HEAD, ROLES.CLUSTER_MANAGER],
+    'requirement',
+    { action: 'rejected', id: requirement._id }
+  );
+
   return requirement;
 };
 
-/**
- * Center Head edits and resubmits a rejected requirement.
- */
 const resubmitRequirement = async (requirementId, data, user) => {
   const requirement = await Requirement.findById(requirementId);
-
   if (!requirement) {
     const error = new Error('Requirement not found.');
     error.statusCode = 404;
     throw error;
   }
-
   if (requirement.status !== DOCUMENT_STATUS.REJECTED) {
     const error = new Error('Only rejected requirements can be resubmitted.');
     error.statusCode = 400;
     throw error;
   }
-
   if (requirement.campusRef.toString() !== user.scopeRef.toString()) {
     const error = new Error('You can only resubmit requirements from your own campus.');
     error.statusCode = 403;
@@ -169,7 +167,6 @@ const resubmitRequirement = async (requirementId, data, user) => {
   requirement.justification = data.justification || requirement.justification;
   requirement.status = DOCUMENT_STATUS.REVISED;
   requirement.timeline.push(buildTimelineEntry(user, TIMELINE_ACTIONS.REVISED, data.note || ''));
-
   await requirement.save();
 
   const clusterManagers = await User.find({ role: ROLES.CLUSTER_MANAGER, isActive: true });
@@ -187,12 +184,17 @@ const resubmitRequirement = async (requirementId, data, user) => {
     });
   }
 
+  emitDashboardRefresh(
+    [ROLES.CENTER_HEAD, ROLES.CLUSTER_MANAGER],
+    'requirement',
+    { action: 'resubmitted', id: requirement._id }
+  );
+
   return requirement;
 };
 
 const getDashboardStats = async (user) => {
   const filter = user.role === ROLES.CENTER_HEAD ? { campusRef: user.scopeRef } : {};
-
   const [total, submitted, underReview, rejected, closed] = await Promise.all([
     Requirement.countDocuments(filter),
     Requirement.countDocuments({ ...filter, status: DOCUMENT_STATUS.SUBMITTED }),
@@ -200,21 +202,14 @@ const getDashboardStats = async (user) => {
     Requirement.countDocuments({ ...filter, status: DOCUMENT_STATUS.REJECTED }),
     Requirement.countDocuments({ ...filter, status: DOCUMENT_STATUS.CLOSED }),
   ]);
-
   const recent = await Requirement.find(filter)
     .sort({ createdAt: -1 })
     .limit(5)
     .populate('campusRef', 'name code')
     .populate('createdBy', 'name');
-
   return { total, submitted, underReview, rejected, closed, recent };
 };
 
-/**
- * Returns the full approval chain for a requirement:
- * requirement → workProposal → assessment → notesheet → memo
- * Used by the frontend to display the complete approval journey.
- */
 const getRequirementChain = async (requirementId, user) => {
   const requirement = await Requirement.findById(requirementId)
     .populate('campusRef', 'name code')
@@ -226,7 +221,6 @@ const getRequirementChain = async (requirementId, user) => {
     error.statusCode = 404;
     throw error;
   }
-
   if (user.role === ROLES.CENTER_HEAD && requirement.campusRef._id.toString() !== user.scopeRef.toString()) {
     const error = new Error('You do not have access to this requirement.');
     error.statusCode = 403;
@@ -234,15 +228,12 @@ const getRequirementChain = async (requirementId, user) => {
   }
 
   const chain = {
-    requirement: {
-      _id: requirement._id,
-      status: requirement.status,
-      timeline: requirement.timeline,
-    },
+    requirement: { _id: requirement._id, status: requirement.status, timeline: requirement.timeline },
     workProposal: null,
     assessment: null,
     notesheet: null,
     memo: null,
+    purchaseOrder: null,
   };
 
   if (!requirement.workProposalRef) return chain;
@@ -251,7 +242,6 @@ const getRequirementChain = async (requirementId, user) => {
     .populate('createdBy', 'name role')
     .populate({ path: 'timeline.actor', select: 'name email role' })
     .lean();
-
   if (!workProposal) return chain;
 
   chain.workProposal = {
@@ -270,7 +260,6 @@ const getRequirementChain = async (requirementId, user) => {
     .populate('departmentRef', 'name')
     .populate({ path: 'timeline.actor', select: 'name email role' })
     .lean();
-
   if (!assessment) return chain;
 
   chain.assessment = {
@@ -291,7 +280,6 @@ const getRequirementChain = async (requirementId, user) => {
     .populate('createdBy', 'name role')
     .populate({ path: 'timeline.actor', select: 'name email role' })
     .lean();
-
   if (!notesheet) return chain;
 
   chain.notesheet = {
@@ -310,7 +298,6 @@ const getRequirementChain = async (requirementId, user) => {
     .populate('decidedBy', 'name role')
     .populate({ path: 'timeline.actor', select: 'name email role' })
     .lean();
-
   if (!memo) return chain;
 
   chain.memo = {
@@ -324,6 +311,28 @@ const getRequirementChain = async (requirementId, user) => {
     decidedAt: memo.decidedAt,
     createdAt: memo.createdAt,
     timeline: memo.timeline,
+  };
+
+  if (!memo.purchaseOrderRef) return chain;
+
+  const purchaseOrder = await PurchaseOrder.findById(memo.purchaseOrderRef)
+    .populate('createdBy', 'name role')
+    .populate('receivedBy', 'name role')
+    .lean();
+  if (!purchaseOrder) return chain;
+
+  chain.purchaseOrder = {
+    _id: purchaseOrder._id,
+    poNumber: purchaseOrder.poNumber,
+    status: purchaseOrder.status,
+    vendorName: purchaseOrder.vendorName,
+    totalAmount: purchaseOrder.totalAmount,
+    piAttachmentUrl: purchaseOrder.piAttachmentUrl,
+    createdBy: purchaseOrder.createdBy,
+    receivedBy: purchaseOrder.receivedBy,
+    receivedAt: purchaseOrder.receivedAt,
+    createdAt: purchaseOrder.createdAt,
+    timeline: purchaseOrder.timeline,
   };
 
   return chain;

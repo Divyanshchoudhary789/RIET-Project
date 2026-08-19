@@ -2,36 +2,31 @@ const Assessment = require('./assessment.model');
 const WorkProposal = require('../proposals/workProposal.model');
 const User = require('../users/user.model');
 const { buildTimelineEntry } = require('../../utils/timeline');
-const { createNotification, notifyMany } = require('../notifications/notification.service');
+const { createNotification, notifyMany, emitDashboardRefresh } = require('../notifications/notification.service');
 const { DOCUMENT_STATUS, TIMELINE_ACTIONS, ROLES } = require('../../config/constants');
 const { getPaginationParams, buildPaginationMeta } = require('../../utils/pagination');
 
 const buildFilter = (user, query) => {
   const filter = {};
-
-  // Department admin is always scoped to their own department — cannot be overridden by query
   if (user.role === ROLES.DEPARTMENT_ADMIN) {
     filter.departmentRef = user.scopeRef;
   } else {
-    // Other roles can optionally filter by department
     if (query.departmentRef) filter.departmentRef = query.departmentRef;
   }
-
   if (query.status) filter.status = query.status;
-
+  if (query.search) {
+    const regex = new RegExp(query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [{ feasibilityNotes: regex }, { recommendedAction: regex }, { technicalRemarks: regex }];
+  }
   return filter;
 };
 
 const listAssessments = async (user, query) => {
   const { page, limit, skip } = getPaginationParams(query);
   const filter = buildFilter(user, query);
-
   const [assessments, total] = await Promise.all([
     Assessment.find(filter)
-      .populate({
-        path: 'workProposalRef',
-        populate: { path: 'requirementRefs', select: 'items priority campusRef' },
-      })
+      .populate({ path: 'workProposalRef', populate: { path: 'requirementRefs', select: 'items priority campusRef' } })
       .populate('departmentRef', 'name code')
       .populate('createdBy', 'name email role')
       .populate({ path: 'timeline.actor', select: 'name email role' })
@@ -40,7 +35,6 @@ const listAssessments = async (user, query) => {
       .limit(limit),
     Assessment.countDocuments(filter),
   ]);
-
   return { assessments, meta: buildPaginationMeta(page, limit, total) };
 };
 
@@ -57,38 +51,27 @@ const getAssessmentById = async (assessmentId) => {
     .populate('createdBy', 'name email role')
     .populate({ path: 'timeline.actor', select: 'name email role' })
     .populate('notesheetRef', 'status revisionNumber');
-
   if (!assessment) {
     const error = new Error('Assessment not found.');
     error.statusCode = 404;
     throw error;
   }
-
   return assessment;
 };
 
 const createAssessment = async (data, departmentAdmin) => {
   const proposal = await WorkProposal.findById(data.workProposalRef);
-
   if (!proposal) {
     const error = new Error('Work proposal not found.');
     error.statusCode = 404;
     throw error;
   }
-
-  if (
-    proposal.status !== DOCUMENT_STATUS.SUBMITTED &&
-    proposal.status !== DOCUMENT_STATUS.REVISED
-  ) {
+  if (proposal.status !== DOCUMENT_STATUS.SUBMITTED && proposal.status !== DOCUMENT_STATUS.REVISED) {
     const error = new Error('Work proposal is not in a reviewable state.');
     error.statusCode = 400;
     throw error;
   }
-
-  const isAssigned = proposal.departmentRefs
-    .map((d) => d.toString())
-    .includes(departmentAdmin.scopeRef.toString());
-
+  const isAssigned = proposal.departmentRefs.map((d) => d.toString()).includes(departmentAdmin.scopeRef.toString());
   if (!isAssigned) {
     const error = new Error('This work proposal is not assigned to your department.');
     error.statusCode = 403;
@@ -109,9 +92,7 @@ const createAssessment = async (data, departmentAdmin) => {
 
   proposal.status = DOCUMENT_STATUS.FORWARDED;
   proposal.assessmentRef = assessment._id;
-  proposal.timeline.push(
-    buildTimelineEntry(departmentAdmin, TIMELINE_ACTIONS.FORWARDED, 'Assessment created')
-  );
+  proposal.timeline.push(buildTimelineEntry(departmentAdmin, TIMELINE_ACTIONS.FORWARDED, 'Assessment created'));
   await proposal.save();
 
   const directors = await User.find({ role: ROLES.DIRECTOR, isActive: true });
@@ -124,27 +105,27 @@ const createAssessment = async (data, departmentAdmin) => {
     actionType: 'Submitted',
   });
 
+  emitDashboardRefresh(
+    [ROLES.DIRECTOR, ROLES.DEPARTMENT_ADMIN],
+    'assessment',
+    { action: 'created', id: assessment._id }
+  );
+
   return assessment;
 };
 
-/**
- * Department Admin revises and resubmits a rejected assessment.
- */
 const resubmitAssessment = async (assessmentId, data, departmentAdmin) => {
   const assessment = await Assessment.findById(assessmentId);
-
   if (!assessment) {
     const error = new Error('Assessment not found.');
     error.statusCode = 404;
     throw error;
   }
-
   if (assessment.status !== DOCUMENT_STATUS.REJECTED) {
     const error = new Error('Only rejected assessments can be resubmitted.');
     error.statusCode = 400;
     throw error;
   }
-
   if (assessment.departmentRef.toString() !== departmentAdmin.scopeRef.toString()) {
     const error = new Error('You can only resubmit assessments from your own department.');
     error.statusCode = 403;
@@ -169,32 +150,30 @@ const resubmitAssessment = async (assessmentId, data, departmentAdmin) => {
     actionType: 'Revised',
   });
 
+  emitDashboardRefresh(
+    [ROLES.DIRECTOR, ROLES.DEPARTMENT_ADMIN],
+    'assessment',
+    { action: 'resubmitted', id: assessment._id }
+  );
+
   return assessment;
 };
 
 const forwardAssessmentToPO = async (assessmentId, director) => {
-  const assessment = await Assessment.findById(assessmentId)
-    .populate('createdBy', 'name email');
-
+  const assessment = await Assessment.findById(assessmentId).populate('createdBy', 'name email');
   if (!assessment) {
     const error = new Error('Assessment not found.');
     error.statusCode = 404;
     throw error;
   }
-
-  if (
-    assessment.status !== DOCUMENT_STATUS.SUBMITTED &&
-    assessment.status !== DOCUMENT_STATUS.REVISED
-  ) {
+  if (assessment.status !== DOCUMENT_STATUS.SUBMITTED && assessment.status !== DOCUMENT_STATUS.REVISED) {
     const error = new Error(`Cannot forward an assessment with status: ${assessment.status}`);
     error.statusCode = 400;
     throw error;
   }
 
   assessment.status = DOCUMENT_STATUS.FORWARDED;
-  assessment.timeline.push(
-    buildTimelineEntry(director, TIMELINE_ACTIONS.FORWARDED, 'Forwarded to PO Office')
-  );
+  assessment.timeline.push(buildTimelineEntry(director, TIMELINE_ACTIONS.FORWARDED, 'Forwarded to PO Office'));
   await assessment.save();
 
   const poUsers = await User.find({ role: ROLES.PO_OFFICE, isActive: true });
@@ -207,23 +186,23 @@ const forwardAssessmentToPO = async (assessmentId, director) => {
     actionType: 'Forwarded',
   });
 
+  emitDashboardRefresh(
+    [ROLES.PO_OFFICE, ROLES.DIRECTOR],
+    'assessment',
+    { action: 'forwarded', id: assessment._id }
+  );
+
   return assessment;
 };
 
 const rejectAssessment = async (assessmentId, note, director) => {
-  const assessment = await Assessment.findById(assessmentId)
-    .populate('createdBy', 'name email');
-
+  const assessment = await Assessment.findById(assessmentId).populate('createdBy', 'name email');
   if (!assessment) {
     const error = new Error('Assessment not found.');
     error.statusCode = 404;
     throw error;
   }
-
-  if (
-    assessment.status !== DOCUMENT_STATUS.SUBMITTED &&
-    assessment.status !== DOCUMENT_STATUS.REVISED
-  ) {
+  if (assessment.status !== DOCUMENT_STATUS.SUBMITTED && assessment.status !== DOCUMENT_STATUS.REVISED) {
     const error = new Error(`Cannot reject an assessment with status: ${assessment.status}`);
     error.statusCode = 400;
     throw error;
@@ -246,14 +225,13 @@ const rejectAssessment = async (assessmentId, note, director) => {
     note,
   });
 
+  emitDashboardRefresh(
+    [ROLES.DEPARTMENT_ADMIN, ROLES.DIRECTOR],
+    'assessment',
+    { action: 'rejected', id: assessment._id }
+  );
+
   return assessment;
 };
 
-module.exports = {
-  listAssessments,
-  getAssessmentById,
-  createAssessment,
-  resubmitAssessment,
-  forwardAssessmentToPO,
-  rejectAssessment,
-};
+module.exports = { listAssessments, getAssessmentById, createAssessment, resubmitAssessment, forwardAssessmentToPO, rejectAssessment };

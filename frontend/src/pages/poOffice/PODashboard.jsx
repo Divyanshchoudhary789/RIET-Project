@@ -1,42 +1,46 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileCheck, FileText, ArrowRight } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass } from '../../utils/helpers';
+import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
 const PODashboard = () => {
   const navigate = useNavigate();
-  const [data, setData]       = useState({ assessments: [], notesheets: [] });
-  const [stats, setStats]     = useState({});
+  const [data, setData] = useState({ assessments: [], notesheets: [] });
+  const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const [aRes, nsRes] = await Promise.all([
-          api.get('/api/assessments?status=forwarded&limit=5'),
-          api.get('/api/notesheets?limit=5&sort=-createdAt'),
-        ]);
-        const aData = aRes.data.data;
-        const nsData = nsRes.data.data;
-        setData({
-          assessments: Array.isArray(aData) ? aData : (aData?.assessments || []),
-          notesheets: Array.isArray(nsData) ? nsData : (nsData?.notesheets || []),
-        });
-        setStats({
-          assessments: aRes.data.meta?.total || aRes.data.total || 0,
-          notesheets: nsRes.data.meta?.total || nsRes.data.total || 0,
-        });
-      } catch (err) {
-        setError(getErrorMessage(err));
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+  const load = useCallback(async () => {
+    try {
+      const [aRes, nsRes] = await Promise.all([
+        api.get('/api/assessments?status=forwarded&limit=5'),
+        api.get('/api/notesheets?limit=5&sort=-createdAt'),
+      ]);
+      const aData = aRes.data.data;
+      const nsData = nsRes.data.data;
+      setData({
+        assessments: Array.isArray(aData) ? aData : (aData?.assessments || []),
+        notesheets: Array.isArray(nsData) ? nsData : (nsData?.notesheets || []),
+      });
+      setStats({
+        assessments: aRes.data.meta?.total || aRes.data.total || 0,
+        notesheets: nsRes.data.meta?.total || nsRes.data.total || 0,
+      });
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (['assessment', 'notesheet'].includes(payload?.entity)) load();
+  });
 
   if (loading) return <div className="page-loader"><span className="spinner" /></div>;
 
@@ -80,15 +84,13 @@ const PODashboard = () => {
           </div>
           <div className="table-wrap">
             <table className="table">
-              <thead>
-                <tr><th>Ref</th><th>Status</th><th>Date</th></tr>
-              </thead>
+              <thead><tr><th>Ref</th><th>Status</th><th>Date</th></tr></thead>
               <tbody>
                 {data.assessments.length === 0 ? (
-                  <tr><td colSpan={3}><div className="empty-state" style={{ padding:24 }}><h3>None forwarded</h3></div></td></tr>
+                  <tr><td colSpan={3}><div className="empty-state" style={{ padding: 24 }}><h3>None forwarded</h3></div></td></tr>
                 ) : data.assessments.map((a) => (
                   <tr key={a._id}>
-                    <td style={{ fontWeight:500, color:'var(--color-text-primary)' }}>{a.referenceNumber || a._id?.slice(-8)}</td>
+                    <td style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>{a.referenceNumber || a._id?.slice(-8)}</td>
                     <td><span className={`badge ${getStatusClass(a.status)}`}>{a.status}</span></td>
                     <td>{formatDate(a.createdAt)}</td>
                   </tr>
@@ -105,15 +107,13 @@ const PODashboard = () => {
           </div>
           <div className="table-wrap">
             <table className="table">
-              <thead>
-                <tr><th>Ref</th><th>Status</th><th>Date</th></tr>
-              </thead>
+              <thead><tr><th>Ref</th><th>Status</th><th>Date</th></tr></thead>
               <tbody>
                 {data.notesheets.length === 0 ? (
-                  <tr><td colSpan={3}><div className="empty-state" style={{ padding:24 }}><h3>None yet</h3></div></td></tr>
+                  <tr><td colSpan={3}><div className="empty-state" style={{ padding: 24 }}><h3>None yet</h3></div></td></tr>
                 ) : data.notesheets.map((n) => (
                   <tr key={n._id}>
-                    <td style={{ fontWeight:500, color:'var(--color-text-primary)' }}>{n.referenceNumber || n._id?.slice(-8)}</td>
+                    <td style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>{n.referenceNumber || n._id?.slice(-8)}</td>
                     <td><span className={`badge ${getStatusClass(n.status)}`}>{n.status}</span></td>
                     <td>{formatDate(n.createdAt)}</td>
                   </tr>

@@ -4,6 +4,7 @@ import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass } from '../../utils/helpers';
 import DocumentDrawer from '../../components/DocumentDrawer';
 import RejectModal from '../../components/RejectModal';
+import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
 const MemosList = () => {
@@ -30,7 +31,7 @@ const MemosList = () => {
       const r = await api.get(`/api/memos?${p}`);
       const d = r.data.data;
       setItems(Array.isArray(d) ? d : (d?.memos || []));
-      setTotal(r.data.total || d?.total || 0);
+      setTotal(r.data.meta?.total || r.data.total || 0);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -41,6 +42,10 @@ const MemosList = () => {
   useEffect(() => {
     fetchMemos();
   }, [fetchMemos]);
+
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (['memo', 'purchaseOrder'].includes(payload?.entity)) fetchMemos();
+  });
 
   const handleApproveMemo = async (memoId) => {
     setActionLoading(true);

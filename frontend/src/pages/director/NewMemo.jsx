@@ -27,9 +27,20 @@ const NewMemo = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const nsRes = await api.get('/api/notesheets?status=submitted&limit=100');
+        // Load notesheets in all states the Director can create a memo from
+        const [ns1, ns2, ns3] = await Promise.all([
+          api.get('/api/notesheets?status=submitted&limit=100'),
+          api.get('/api/notesheets?status=revised&limit=100'),
+          api.get('/api/notesheets?status=forwarded&limit=100'),
+        ]);
+        const extract = (r) => { const d = r.data.data; return Array.isArray(d) ? d : (d?.notesheets || []); };
+        const allNs = [...extract(ns1), ...extract(ns2), ...extract(ns3)];
+        // deduplicate by _id
+        const seen = new Set();
+        const nsRes = { data: { data: allNs.filter((n) => { if (seen.has(n._id)) return false; seen.add(n._id); return true; }) } };
         const d = nsRes.data.data;
-        setNotesheets(Array.isArray(d) ? d : (d?.notesheets || []));
+        const nsArr = Array.isArray(d) ? d : (d?.notesheets || []);
+        setNotesheets(nsArr);
 
         if (resubmitMemoId) {
           const memoRes = await api.get(`/api/memos/${resubmitMemoId}`);
@@ -110,7 +121,11 @@ const NewMemo = () => {
               <select className="form-select" value={form.notesheetRef} onChange={(e) => set('notesheetRef', e.target.value)} disabled={!!resubmitMemoId}>
                 <option value="">Select a notesheet…</option>
                 {notesheets.map((ns) => (
-                  <option key={ns._id} value={ns._id}>{ns.referenceNumber || ns._id?.slice(-8)}</option>
+                  <option key={ns._id} value={ns._id}>
+                    {ns.referenceNumber || ns._id?.slice(-8)}
+                    {ns.assessmentRef?.workProposalRef?.title ? ` — ${ns.assessmentRef.workProposalRef.title}` : ''}
+                    {ns.status && ns.status !== 'submitted' ? ` [${ns.status}]` : ''}
+                  </option>
                 ))}
               </select>
             </div>

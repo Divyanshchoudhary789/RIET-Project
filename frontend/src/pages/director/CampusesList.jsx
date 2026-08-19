@@ -33,7 +33,7 @@ const CampusesList = () => {
       const r = await api.get(`/api/campuses?${p}`);
       const d = r.data.data;
       setItems(Array.isArray(d) ? d : (d?.campuses || []));
-      setTotal(r.data.total || d?.total || 0);
+      setTotal(r.data.meta?.total || r.data.total || 0);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

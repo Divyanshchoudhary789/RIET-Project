@@ -12,21 +12,40 @@ const setSocketIO = (socketInstance) => {
   io = socketInstance;
 };
 
+/** Expose raw io for domain event emission from services */
+const getIO = () => io;
+
+/**
+ * Emit a dashboard:refresh event to every member of a role-based room.
+ * Services call this after any state mutation so dashboards re-fetch.
+ *
+ * @param {string|string[]} roles  - e.g. 'center_head' or ['director','po_office']
+ * @param {string}          entity - e.g. 'requirement', 'assessment', 'memo'
+ * @param {object}          [meta] - optional payload (documentId, action, etc.)
+ */
+const emitDashboardRefresh = (roles, entity, meta = {}) => {
+  if (!io) return;
+  const roleList = Array.isArray(roles) ? roles : [roles];
+  roleList.forEach((role) => {
+    io.to(`role:${role}`).emit('dashboard:refresh', { entity, ...meta });
+  });
+};
+
 /**
  * Creates an in-app notification and emits it via Socket.io if the user is online.
  * Also triggers an email notification.
  *
  * @param {object} params
- * @param {string} params.userId - Recipient's User _id
- * @param {string} params.userEmail - Recipient's email for email notification
- * @param {string} params.userName - Recipient's name for email greeting
- * @param {string} params.type - Notification type identifier
- * @param {string} params.title - Short notification title
- * @param {string} params.message - Full notification message
- * @param {string|null} params.documentType - Document model name (e.g. 'Requirement')
- * @param {string|null} params.documentId - Document _id
- * @param {string} [params.actionType] - e.g. 'Forwarded', 'Rejected', 'Approved'
- * @param {string} [params.note] - Reviewer note to include in email
+ * @param {string} params.userId        - Recipient's User _id
+ * @param {string} params.userEmail     - Recipient's email
+ * @param {string} params.userName      - Recipient's name
+ * @param {string} params.type          - Notification type identifier
+ * @param {string} params.title         - Short notification title
+ * @param {string} params.message       - Full notification message
+ * @param {string|null} params.documentType
+ * @param {string|null} params.documentId
+ * @param {string} [params.actionType]
+ * @param {string} [params.note]
  */
 const createNotification = async ({
   userId,
@@ -77,7 +96,7 @@ const createNotification = async ({
 /**
  * Creates notifications for multiple recipients at once.
  * @param {Array<object>} recipients - Array of user objects with _id, email, name
- * @param {object} notificationData - Common notification data (type, title, message, etc.)
+ * @param {object} notificationData  - Common notification data
  */
 const notifyMany = async (recipients, notificationData) => {
   const tasks = recipients.map((user) =>
@@ -91,4 +110,4 @@ const notifyMany = async (recipients, notificationData) => {
   await Promise.allSettled(tasks);
 };
 
-module.exports = { setSocketIO, createNotification, notifyMany };
+module.exports = { setSocketIO, getIO, emitDashboardRefresh, createNotification, notifyMany };

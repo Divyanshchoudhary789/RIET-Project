@@ -1,26 +1,37 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, RefreshCw, FilePlus2, X } from 'lucide-react';
 import api from '../../utils/api';
 import { formatDate, getErrorMessage, getStatusClass, getPriorityClass } from '../../utils/helpers';
 import ApprovalJourney from '../../components/ApprovalJourney';
+import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
+
+// Entities that can change the approval chain or requirement status
+const CHAIN_ENTITIES = ['requirement', 'workProposal', 'assessment', 'notesheet', 'memo', 'purchaseOrder'];
 
 const RequirementsList = () => {
   const navigate = useNavigate();
-  const [items, setItems] = useState([]);
+  const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError]   = useState('');
 
   // Drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selected, setSelected] = useState(null);       // full requirement doc
-  const [chain, setChain] = useState(null);              // approval chain
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [drawerOpen, setDrawerOpen]         = useState(false);
+  const [selected, setSelected]             = useState(null);
+  const [chain, setChain]                   = useState(null);
+  const [detailLoading, setDetailLoading]   = useState(false);
+  // Silent re-fetch flag — shows a subtle indicator instead of full spinner
+  const [chainRefreshing, setChainRefreshing] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState('');
-  const [search, setSearch] = useState('');
+  const [search, setSearch]             = useState('');
 
+  // Keep a stable ref to the currently open requirement id
+  // so the socket handler can access it without stale closure
+  const openReqIdRef = useRef(null);
+
+  // ── List fetch ──────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -38,44 +49,82 @@ const RequirementsList = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  // Open drawer: fetch full detail + chain in parallel
-  const openDetail = async (req) => {
-    setDrawerOpen(true);
-    setSelected(req);   // show immediately with list data
-    setChain(null);
-    setDetailLoading(true);
+  // Re-fetch list when any upstream document changes (status badge updates)
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (CHAIN_ENTITIES.includes(payload?.entity)) load();
+  });
+
+  // ── Chain fetch (used on open and on silent refresh) ─────────────────────
+  const fetchChain = useCallback(async (reqId, { silent = false } = {}) => {
+    if (silent) {
+      setChainRefreshing(true);
+    } else {
+      setDetailLoading(true);
+      setChain(null);
+    }
     try {
-      // Always fetch both — chain API handles the null case gracefully
       const [detailRes, chainRes] = await Promise.all([
-        api.get(`/api/requirements/${req._id}`),
-        api.get(`/api/requirements/${req._id}/chain`),
+        api.get(`/api/requirements/${reqId}`),
+        api.get(`/api/requirements/${reqId}/chain`),
       ]);
-      const fullDoc = detailRes.data.data;
-      setSelected(fullDoc);
+      const fullDoc   = detailRes.data.data;
       const chainData = chainRes.data.data;
-      // Only set chain if at least one downstream document exists
-      const chainHasData = chainData && (
-        chainData.workProposal || chainData.assessment ||
-        chainData.notesheet || chainData.memo
+
+      // Always update the selected doc so status badge in drawer is fresh
+      setSelected(fullDoc);
+
+      // Also patch the status in the table row without re-fetching the full list
+      setItems((prev) =>
+        prev.map((it) =>
+          it._id === reqId ? { ...it, status: fullDoc.status } : it
+        )
       );
+
+      const chainHasData =
+        chainData && (chainData.workProposal || chainData.assessment ||
+                      chainData.notesheet   || chainData.memo        ||
+                      chainData.purchaseOrder);
       setChain(chainHasData ? chainData : null);
-    } catch (e) {
-      // keep list-row data on failure, chain stays null
+    } catch {
+      // on silent refresh keep existing data; on initial open keep list-row data
     } finally {
       setDetailLoading(false);
+      setChainRefreshing(false);
     }
+  }, []);
+
+  // ── Open drawer ────────────────────────────────────────────────────────────
+  const openDetail = (req) => {
+    openReqIdRef.current = req._id;
+    setDrawerOpen(true);
+    setSelected(req);  // show list data immediately (no blank drawer)
+    fetchChain(req._id);
   };
 
+  // ── Socket: silently refresh chain while drawer is open ───────────────────
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (
+      CHAIN_ENTITIES.includes(payload?.entity) &&
+      openReqIdRef.current &&
+      drawerOpen
+    ) {
+      fetchChain(openReqIdRef.current, { silent: true });
+    }
+  });
+
+  // ── Close drawer ───────────────────────────────────────────────────────────
   const closeDrawer = () => {
     setDrawerOpen(false);
     setSelected(null);
     setChain(null);
+    openReqIdRef.current = null;
   };
 
-  const filtered = items.filter((it) =>
-    !search ||
-    it.justification?.toLowerCase().includes(search.toLowerCase()) ||
-    it.priority?.includes(search)
+  const filtered = items.filter(
+    (it) =>
+      !search ||
+      it.justification?.toLowerCase().includes(search.toLowerCase()) ||
+      it.priority?.includes(search)
   );
 
   return (
@@ -172,26 +221,35 @@ const RequirementsList = () => {
         )}
       </div>
 
-      {/* Custom Requirement Drawer */}
+      {/* ── Requirement Drawer ─────────────────────────────────────────────── */}
       {drawerOpen && selected && (
         <>
           <div className="drawer-overlay" onClick={closeDrawer} />
           <div className="drawer">
+
             {/* Header */}
             <div className="drawer-header">
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span className="drawer-title">Requirement Details</span>
-                <span style={{
-                  fontSize: 'var(--font-size-xs)',
-                  color: 'var(--color-text-muted)',
-                  fontFamily: 'var(--font-mono)',
-                }}>
+                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
                   Ref: {selected.referenceNumber || selected._id}
                 </span>
               </div>
-              <button className="modal-close" onClick={closeDrawer} aria-label="Close">
-                <X size={18} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Subtle live-refresh indicator — visible only during silent re-fetch */}
+                {chainRefreshing && (
+                  <span
+                    title="Updating…"
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--color-text-muted)' }}
+                  >
+                    <span className="spinner spinner-sm" />
+                    Updating…
+                  </span>
+                )}
+                <button className="modal-close" onClick={closeDrawer} aria-label="Close">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <div className="drawer-body">
@@ -258,7 +316,7 @@ const RequirementsList = () => {
                 )}
               </div>
 
-              {/* ── Approval Journey (unified flow) ── */}
+              {/* ── Approval Journey ── */}
               <div className="drawer-section-title">Approval Journey</div>
               {detailLoading ? (
                 <div style={{ textAlign: 'center', padding: '28px 0' }}>
@@ -268,8 +326,6 @@ const RequirementsList = () => {
                   </div>
                 </div>
               ) : (
-                /* Always render ApprovalJourney — passes requirement timeline for step 1,
-                   and chain for downstream steps. If chain is null, only step 1 is active. */
                 <ApprovalJourney
                   chain={chain}
                   requirementTimeline={selected.timeline || []}

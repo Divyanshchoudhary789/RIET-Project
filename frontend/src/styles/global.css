@@ -747,3 +747,26 @@ h1, h2, h3, h4, h5, h6 {
 /* ── Badge: active/inactive ── */
 .badge-active   { color: var(--status-approved);  background: var(--status-approved-bg); }
 .badge-inactive { color: var(--status-rejected);  background: var(--status-rejected-bg); }
+
+/* ── Print styles ── */
+@media print {
+  .app-sidebar,
+  .app-topbar,
+  .topbar-actions,
+  .btn,
+  .modal-overlay,
+  .filters-bar,
+  .pagination,
+  .notif-wrapper,
+  .sidebar-logout,
+  .page-header .btn,
+  button { display: none !important; }
+
+  .app-main { margin-left: 0 !important; }
+  .app-content { padding: 0 !important; }
+  .section-card, .stat-card { box-shadow: none !important; break-inside: avoid; }
+  .table { font-size: 11px; }
+  .table th, .table td { padding: 6px 8px; }
+  a { color: inherit !important; text-decoration: none !important; }
+  .badge { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}

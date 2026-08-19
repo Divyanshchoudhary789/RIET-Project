@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, ShoppingCart, Eye, FileText, CheckCircle2 } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, formatCurrency, getStatusClass } from '../../utils/helpers';
+import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
 const PurchaseOrdersList = () => {
@@ -26,8 +27,8 @@ const PurchaseOrdersList = () => {
       if (statusFilter) p.set('status', statusFilter);
       const r = await api.get(`/api/purchase-orders?${p}`);
       const d = r.data.data;
-      setPos(Array.isArray(d) ? d : (d?.purchaseOrders || []));
-      setTotal(r.data.total || d?.total || 0);
+      setPos(Array.isArray(d) ? d : (d?.orders || d?.purchaseOrders || []));
+      setTotal(r.data.meta?.total || r.data.total || d?.total || 0);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -38,6 +39,11 @@ const PurchaseOrdersList = () => {
   useEffect(() => {
     fetchPurchaseOrders();
   }, [fetchPurchaseOrders]);
+
+  // Re-fetch when any PO is created, updated, or goods are received
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (payload?.entity === 'purchaseOrder') fetchPurchaseOrders();
+  });
 
   const totalPages = Math.ceil(total / limit) || 1;
 
@@ -71,7 +77,8 @@ const PurchaseOrdersList = () => {
           >
             <option value="">All Statuses</option>
             <option value="issued">Issued</option>
-            <option value="received">Received / Closed</option>
+            <option value="pi_uploaded">PI Uploaded</option>
+            <option value="closed">Goods Received / Closed</option>
           </select>
         </div>
 

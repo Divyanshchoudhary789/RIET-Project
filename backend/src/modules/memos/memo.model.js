@@ -67,4 +67,11 @@ const memoSchema = new mongoose.Schema(
 memoSchema.index({ status: 1, createdAt: -1 });
 memoSchema.index({ createdBy: 1 });
 
+// Human-readable reference derived from _id
+memoSchema.virtual('referenceNumber').get(function () {
+  return `MEMO-${this._id.toString().slice(-8).toUpperCase()}`;
+});
+memoSchema.set('toJSON', { virtuals: true });
+memoSchema.set('toObject', { virtuals: true });
+
 module.exports = mongoose.model('Memo', memoSchema);

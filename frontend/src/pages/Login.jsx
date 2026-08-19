@@ -146,7 +146,17 @@ const Login = () => {
     setError(''); setSubmitting(true);
     try {
       await changePassword(currentPw, newPw, confirmPw);
-      setSuccess('Password changed. Please log in with your new password.');
+      setSuccess('Password changed successfully. Please sign in with your new password.');
+      // Auto-redirect to login after 2 seconds
+      setTimeout(() => {
+        setStep('login');
+        setSuccess('');
+        setCurrentPw('');
+        setNewPw('');
+        setConfirmPw('');
+        setEmail('');
+        setPassword('');
+      }, 2000);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -299,24 +309,12 @@ const Login = () => {
               <p className="auth-form-subtitle">You must set a new password before accessing the platform.</p>
 
               {success ? (
-                /* ── Success state: show message + go to login button ── */
+                /* ── Success state: auto-redirects in 2s ── */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 8 }}>
                   <div className="alert alert-success">{success}</div>
-                  <button
-                    type="button"
-                    className="auth-submit"
-                    onClick={() => {
-                      setStep('login');
-                      setSuccess('');
-                      setCurrentPw('');
-                      setNewPw('');
-                      setConfirmPw('');
-                      setEmail('');
-                      setPassword('');
-                    }}
-                  >
-                    Go to Sign In
-                  </button>
+                  <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', textAlign: 'center' }}>
+                    Redirecting to sign in…
+                  </div>
                 </div>
               ) : (
                 /* ── Form state ── */

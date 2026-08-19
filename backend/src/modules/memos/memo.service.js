@@ -5,7 +5,7 @@ const WorkProposal = require('../proposals/workProposal.model');
 const Requirement = require('../requirements/requirement.model');
 const User = require('../users/user.model');
 const { buildTimelineEntry } = require('../../utils/timeline');
-const { createNotification, notifyMany } = require('../notifications/notification.service');
+const { createNotification, notifyMany, emitDashboardRefresh } = require('../notifications/notification.service');
 const { DOCUMENT_STATUS, TIMELINE_ACTIONS, ROLES } = require('../../config/constants');
 const { getPaginationParams, buildPaginationMeta } = require('../../utils/pagination');
 
@@ -13,13 +13,14 @@ const listMemos = async (user, query) => {
   const { page, limit, skip } = getPaginationParams(query);
   const filter = {};
   if (query.status) filter.status = query.status;
+  if (query.search) {
+    const regex = new RegExp(query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [{ summary: regex }, { recommendedVendor: regex }];
+  }
 
   const [memos, total] = await Promise.all([
     Memo.find(filter)
-      .populate({
-        path: 'notesheetRef',
-        populate: { path: 'assessmentRef', select: 'estimatedCost workProposalRef' },
-      })
+      .populate({ path: 'notesheetRef', populate: { path: 'assessmentRef', select: 'estimatedCost workProposalRef departmentRef' } })
       .populate('createdBy', 'name email role')
       .populate('decidedBy', 'name email role')
       .populate({ path: 'timeline.actor', select: 'name email role' })
@@ -28,7 +29,6 @@ const listMemos = async (user, query) => {
       .limit(limit),
     Memo.countDocuments(filter),
   ]);
-
   return { memos, meta: buildPaginationMeta(page, limit, total) };
 };
 
@@ -36,71 +36,63 @@ const getMemoById = async (memoId) => {
   const memo = await Memo.findById(memoId)
     .populate({
       path: 'notesheetRef',
-      populate: {
-        path: 'assessmentRef',
-        populate: {
-          path: 'workProposalRef',
-          populate: { path: 'requirementRefs', select: 'items priority campusRef' },
+      populate: [
+        { path: 'createdBy', select: 'name email role' },
+        {
+          path: 'assessmentRef',
+          populate: [
+            { path: 'createdBy', select: 'name email role' },
+            { path: 'departmentRef', select: 'name code' },
+            {
+              path: 'workProposalRef',
+              populate: [
+                { path: 'createdBy', select: 'name email role' },
+                { path: 'departmentRefs', select: 'name code' },
+                { path: 'requirementRefs', populate: [{ path: 'campusRef', select: 'name code' }, { path: 'createdBy', select: 'name email role' }] },
+              ],
+            },
+          ],
         },
-      },
+      ],
     })
     .populate('createdBy', 'name email role')
     .populate('decidedBy', 'name email role')
     .populate({ path: 'timeline.actor', select: 'name email role' })
     .populate('purchaseOrderRef', 'poNumber status totalAmount');
-
   if (!memo) {
     const error = new Error('Memo not found.');
     error.statusCode = 404;
     throw error;
   }
-
   return memo;
 };
 
-/**
- * Internal helper — creates a memo from a notesheet.
- * Accepts notesheets in SUBMITTED, REVISED, or FORWARDED status.
- * FORWARDED is allowed when the Director is creating a revised memo after Chairperson rejection
- * (the notesheet's status is already FORWARDED from the original memo, but that memo was rejected).
- */
 const _createMemo = async (data, director) => {
   const notesheet = await Notesheet.findById(data.notesheetRef);
-
   if (!notesheet) {
     const error = new Error('Notesheet not found.');
     error.statusCode = 404;
     throw error;
   }
 
-  const allowedNotesheetStatuses = [
-    DOCUMENT_STATUS.SUBMITTED,
-    DOCUMENT_STATUS.REVISED,
-    DOCUMENT_STATUS.FORWARDED,
-  ];
-
+  const allowedNotesheetStatuses = [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.REVISED, DOCUMENT_STATUS.FORWARDED];
   if (!allowedNotesheetStatuses.includes(notesheet.status)) {
-    const error = new Error(
-      `Cannot create a memo from a notesheet with status: ${notesheet.status}`
-    );
+    const error = new Error(`Cannot create a memo from a notesheet with status: ${notesheet.status}`);
     error.statusCode = 400;
     throw error;
   }
 
-  // Prevent creating a duplicate active memo for the same notesheet
   const existingActiveMemo = await Memo.findOne({
     notesheetRef: data.notesheetRef,
     status: { $in: [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.APPROVED] },
   });
-
   if (existingActiveMemo) {
     const error = new Error('An active memo already exists for this notesheet.');
     error.statusCode = 409;
     throw error;
   }
 
-  const latestMemo = await Memo.findOne({ notesheetRef: data.notesheetRef })
-    .sort({ revisionNumber: -1 });
+  const latestMemo = await Memo.findOne({ notesheetRef: data.notesheetRef }).sort({ revisionNumber: -1 });
   const revisionNumber = latestMemo ? latestMemo.revisionNumber + 1 : 1;
 
   const memo = await Memo.create({
@@ -113,12 +105,9 @@ const _createMemo = async (data, director) => {
     timeline: [buildTimelineEntry(director, TIMELINE_ACTIONS.SUBMITTED)],
   });
 
-  // Mark notesheet as FORWARDED and link this memo
   notesheet.status = DOCUMENT_STATUS.FORWARDED;
   notesheet.memoRef = memo._id;
-  notesheet.timeline.push(
-    buildTimelineEntry(director, TIMELINE_ACTIONS.FORWARDED, 'Memo created')
-  );
+  notesheet.timeline.push(buildTimelineEntry(director, TIMELINE_ACTIONS.FORWARDED, 'Memo created'));
   await notesheet.save();
 
   const chairpersons = await User.find({ role: ROLES.CHAIRPERSON, isActive: true });
@@ -131,72 +120,53 @@ const _createMemo = async (data, director) => {
     actionType: 'Submitted',
   });
 
+  emitDashboardRefresh(
+    [ROLES.CHAIRPERSON, ROLES.DIRECTOR],
+    'memo',
+    { action: 'created', id: memo._id }
+  );
+
   return memo;
 };
 
-// Public alias used by the controller
 const createMemo = _createMemo;
 
-/**
- * Director revises and resubmits a rejected memo.
- * Can optionally point to a new notesheet (if PO Office prepared revised quotations).
- * Per PRD: Chairperson rejects → PO Office revises notesheet → Director submits revised memo.
- */
 const resubmitMemo = async (memoId, data, director) => {
   const originalMemo = await Memo.findById(memoId);
-
   if (!originalMemo) {
     const error = new Error('Memo not found.');
     error.statusCode = 404;
     throw error;
   }
-
   if (originalMemo.status !== DOCUMENT_STATUS.REJECTED) {
     const error = new Error('Only rejected memos can be resubmitted.');
     error.statusCode = 400;
     throw error;
   }
-
   if (originalMemo.createdBy.toString() !== director._id.toString()) {
     const error = new Error('You can only resubmit memos that you created.');
     error.statusCode = 403;
     throw error;
   }
 
-  // Director can point to a new notesheet with updated quotations,
-  // or reuse the original notesheet (which is in FORWARDED status and has the rejected memo linked)
   const notesheetId = data.notesheetRef || originalMemo.notesheetRef.toString();
-
   const revisedMemo = await _createMemo(
-    {
-      notesheetRef: notesheetId,
-      summary: data.summary || originalMemo.summary,
-      recommendedVendor: data.recommendedVendor ?? originalMemo.recommendedVendor,
-    },
+    { notesheetRef: notesheetId, summary: data.summary || originalMemo.summary, recommendedVendor: data.recommendedVendor ?? originalMemo.recommendedVendor },
     director
   );
-
   return revisedMemo;
 };
 
 const decideMemo = async (memoId, action, note, chairperson) => {
   const memo = await Memo.findById(memoId)
     .populate('createdBy', 'name email')
-    .populate({
-      path: 'notesheetRef',
-      populate: { path: 'createdBy', select: 'name email _id' },
-    });
-
+    .populate({ path: 'notesheetRef', populate: { path: 'createdBy', select: 'name email _id' } });
   if (!memo) {
     const error = new Error('Memo not found.');
     error.statusCode = 404;
     throw error;
   }
-
-  if (
-    memo.status !== DOCUMENT_STATUS.SUBMITTED &&
-    memo.status !== DOCUMENT_STATUS.REVISED
-  ) {
+  if (memo.status !== DOCUMENT_STATUS.SUBMITTED && memo.status !== DOCUMENT_STATUS.REVISED) {
     const error = new Error(`Cannot review a memo with status: ${memo.status}`);
     error.statusCode = 400;
     throw error;
@@ -209,8 +179,7 @@ const decideMemo = async (memoId, action, note, chairperson) => {
     memo.decidedAt = new Date();
     memo.timeline.push(buildTimelineEntry(chairperson, TIMELINE_ACTIONS.APPROVED, note || ''));
 
-    // Trace back through the chain: memo → notesheet → assessment → workProposal → requirements
-    // and mark all linked requirements as CLOSED (final state after chairperson approval)
+    // Trace back and close all linked requirements
     try {
       const notesheet = await Notesheet.findById(memo.notesheetRef).lean();
       if (notesheet?.assessmentRef) {
@@ -222,16 +191,13 @@ const decideMemo = async (memoId, action, note, chairperson) => {
               { _id: { $in: workProposal.requirementRefs } },
               {
                 $set: { status: DOCUMENT_STATUS.CLOSED },
-                $push: {
-                  timeline: buildTimelineEntry(chairperson, TIMELINE_ACTIONS.APPROVED, 'Memo approved by Chairperson'),
-                },
+                $push: { timeline: buildTimelineEntry(chairperson, TIMELINE_ACTIONS.APPROVED, 'Memo approved by Chairperson') },
               }
             );
           }
         }
       }
     } catch (_err) {
-      // Non-critical — log but don't fail the memo approval
       console.error('[decideMemo] Failed to close linked requirements:', _err.message);
     }
 
@@ -258,6 +224,12 @@ const decideMemo = async (memoId, action, note, chairperson) => {
         actionType: 'Approved',
       });
     }
+
+    emitDashboardRefresh(
+      [ROLES.ACCOUNTS, ROLES.DIRECTOR, ROLES.CHAIRPERSON, ROLES.CENTER_HEAD],
+      'memo',
+      { action: 'approved', id: memo._id }
+    );
   } else {
     memo.status = DOCUMENT_STATUS.REJECTED;
     memo.decisionNote = note;
@@ -265,26 +237,16 @@ const decideMemo = async (memoId, action, note, chairperson) => {
     memo.decidedAt = new Date();
     memo.timeline.push(buildTimelineEntry(chairperson, TIMELINE_ACTIONS.REJECTED, note));
 
-    // Notify both Director (memo creator) and PO Office (notesheet creator) — PRD requirement
     const recipientIds = new Set();
     const recipients = [];
-
     if (memo.createdBy?._id) {
       const key = memo.createdBy._id.toString();
-      if (!recipientIds.has(key)) {
-        recipientIds.add(key);
-        recipients.push(memo.createdBy);
-      }
+      if (!recipientIds.has(key)) { recipientIds.add(key); recipients.push(memo.createdBy); }
     }
-
     if (memo.notesheetRef?.createdBy?._id) {
       const key = memo.notesheetRef.createdBy._id.toString();
-      if (!recipientIds.has(key)) {
-        recipientIds.add(key);
-        recipients.push(memo.notesheetRef.createdBy);
-      }
+      if (!recipientIds.has(key)) { recipientIds.add(key); recipients.push(memo.notesheetRef.createdBy); }
     }
-
     for (const recipient of recipients) {
       await createNotification({
         userId: recipient._id,
@@ -299,6 +261,12 @@ const decideMemo = async (memoId, action, note, chairperson) => {
         note,
       });
     }
+
+    emitDashboardRefresh(
+      [ROLES.DIRECTOR, ROLES.CHAIRPERSON, ROLES.PO_OFFICE],
+      'memo',
+      { action: 'rejected', id: memo._id }
+    );
   }
 
   await memo.save();

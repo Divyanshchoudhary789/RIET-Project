@@ -38,8 +38,8 @@ const getCampusById = async (campusId) => {
 /**
  * Creates a new campus and optionally provisions a Center Head user for it.
  */
-const createCampus = async ({ name, code, centerHeadData, createdBy }) => {
-  const campus = await Campus.create({ name, code, createdBy });
+const createCampus = async ({ name, code, location, centerHeadData, createdBy }) => {
+  const campus = await Campus.create({ name, code, location: location || '', createdBy });
 
   if (centerHeadData) {
     const centerHead = await authService.provisionUserAccount({

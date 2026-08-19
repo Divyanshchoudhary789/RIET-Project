@@ -17,6 +17,11 @@ const campusSchema = new mongoose.Schema(
       trim: true,
       maxlength: [20, 'Campus code must not exceed 20 characters'],
     },
+    location: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     centerHeadRef: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

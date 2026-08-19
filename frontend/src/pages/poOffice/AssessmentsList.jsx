@@ -3,6 +3,7 @@ import { Search, Eye } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass, formatCurrency } from '../../utils/helpers';
 import DocumentDetail from '../../components/DocumentDetail';
+import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
 const AssessmentsList = () => {
@@ -24,7 +25,7 @@ const AssessmentsList = () => {
       const r = await api.get(`/api/assessments?${p}`);
       const d = r.data.data;
       setItems(Array.isArray(d) ? d : (d?.assessments || []));
-      setTotal(r.data.total || d?.total || 0);
+      setTotal(r.data.meta?.total || r.data.total || 0);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -33,6 +34,10 @@ const AssessmentsList = () => {
   }, [page, search]);
 
   useEffect(() => { fetch(); }, [fetch]);
+
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (['assessment', 'notesheet'].includes(payload?.entity)) fetch();
+  });
 
   const totalPages = Math.ceil(total / limit) || 1;
 

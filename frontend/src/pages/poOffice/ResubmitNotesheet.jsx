@@ -80,15 +80,24 @@ const ResubmitNotesheet = () => {
     for (let i = 0; i < quotations.length; i++) {
       const q = quotations[i];
       if (!q.vendorName.trim()) {
-        setError(`Vendor name is required for Quotation #${i + 1}.`);
+        setError(`Quotation #${i + 1}: Vendor name is required.`);
         return;
       }
       if (!q.amount || Number(q.amount) < 0) {
-        setError(`Valid amount is required for Quotation #${i + 1}.`);
+        setError(`Quotation #${i + 1}: Please enter a valid amount (₹0 or more).`);
         return;
       }
       if (!q.validity) {
-        setError(`Validity date is required for Quotation #${i + 1}.`);
+        setError(`Quotation #${i + 1}: Validity date is required.`);
+        return;
+      }
+      // Validity must be today or future
+      const selectedDate = new Date(q.validity);
+      selectedDate.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selectedDate < today) {
+        setError(`Quotation #${i + 1} — Validity Until: Date cannot be in the past. Please select today's date or a future date.`);
         return;
       }
     }
@@ -136,8 +145,8 @@ const ResubmitNotesheet = () => {
 
       {error && <div className="page-error" style={{ marginBottom: 20 }}>{error}</div>}
 
-      {/* Show previous rejection note */}
-      {notesheet?.decisionNote && (
+      {/* Show previous rejection note from timeline */}
+      {notesheet?.timeline?.findLast?.((t) => t.action === 'Rejected')?.note && (
         <div
           style={{
             background: 'var(--color-danger-bg)',
@@ -151,7 +160,7 @@ const ResubmitNotesheet = () => {
             Rejection Reason (Director):
           </div>
           <div style={{ fontSize: 'var(--font-size-sm)', color: '#991b1b', fontStyle: 'italic' }}>
-            "{notesheet.decisionNote}"
+            "{notesheet.timeline.findLast((t) => t.action === 'Rejected').note}"
           </div>
         </div>
       )}
@@ -234,10 +243,12 @@ const ResubmitNotesheet = () => {
                 <input
                   type="date"
                   className="form-input"
+                  min={new Date().toISOString().split('T')[0]}
                   value={q.validity}
                   onChange={(e) => handleQuotationChange(idx, 'validity', e.target.value)}
                   required
                 />
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>Today or future date</span>
               </div>
             </div>
 

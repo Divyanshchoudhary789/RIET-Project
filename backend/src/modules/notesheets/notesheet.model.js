@@ -84,4 +84,11 @@ const notesheetSchema = new mongoose.Schema(
 notesheetSchema.index({ assessmentRef: 1 });
 notesheetSchema.index({ status: 1, createdAt: -1 });
 
+// Human-readable reference derived from _id
+notesheetSchema.virtual('referenceNumber').get(function () {
+  return `NS-${this._id.toString().slice(-8).toUpperCase()}`;
+});
+notesheetSchema.set('toJSON', { virtuals: true });
+notesheetSchema.set('toObject', { virtuals: true });
+
 module.exports = mongoose.model('Notesheet', notesheetSchema);

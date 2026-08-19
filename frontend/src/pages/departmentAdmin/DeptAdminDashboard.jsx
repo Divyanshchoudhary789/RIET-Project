@@ -1,39 +1,43 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardList, FileCheck, ArrowRight, Clock } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass } from '../../utils/helpers';
+import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
 const DeptAdminDashboard = () => {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState([]);
-  const [stats, setStats]         = useState({ proposals: 0, assessments: 0 });
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState('');
+  const [stats, setStats] = useState({ proposals: 0, assessments: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const [propRes, assessRes] = await Promise.all([
-          api.get('/api/work-proposals?limit=5&sort=-createdAt'),
-          api.get('/api/assessments?limit=1'),
-        ]);
-        const props = propRes.data.data;
-        const arr = Array.isArray(props) ? props : (props?.proposals || []);
-        setProposals(arr.slice(0, 5));
-        setStats({
-          proposals: propRes.data.meta?.total || propRes.data.total || arr.length,
-          assessments: assessRes.data.meta?.total || assessRes.data.total || 0,
-        });
-      } catch (err) {
-        setError(getErrorMessage(err));
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+  const load = useCallback(async () => {
+    try {
+      const [propRes, assessRes] = await Promise.all([
+        api.get('/api/work-proposals?limit=5&sort=-createdAt'),
+        api.get('/api/assessments?limit=1'),
+      ]);
+      const props = propRes.data.data;
+      const arr = Array.isArray(props) ? props : (props?.proposals || []);
+      setProposals(arr.slice(0, 5));
+      setStats({
+        proposals: propRes.data.meta?.total || propRes.data.total || arr.length,
+        assessments: assessRes.data.meta?.total || assessRes.data.total || 0,
+      });
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (['workProposal', 'assessment'].includes(payload?.entity)) load();
+  });
 
   if (loading) return <div className="page-loader"><span className="spinner" /></div>;
 
@@ -79,23 +83,16 @@ const DeptAdminDashboard = () => {
         <div className="table-wrap">
           <table className="table">
             <thead>
-              <tr>
-                <th>Reference</th>
-                <th>Title</th>
-                <th>Status</th>
-                <th>Date</th>
-              </tr>
+              <tr><th>Reference</th><th>Title</th><th>Status</th><th>Date</th></tr>
             </thead>
             <tbody>
               {proposals.length === 0 ? (
                 <tr><td colSpan={4}>
-                  <div className="empty-state" style={{ padding:32 }}>
-                    <h3>No proposals yet</h3>
-                  </div>
+                  <div className="empty-state" style={{ padding: 32 }}><h3>No proposals yet</h3></div>
                 </td></tr>
               ) : proposals.map((p) => (
                 <tr key={p._id}>
-                  <td style={{ fontWeight:500, color:'var(--color-text-primary)' }}>{p.referenceNumber || p._id?.slice(-8)}</td>
+                  <td style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>{p.referenceNumber || p._id?.slice(-8)}</td>
                   <td>{p.title || '—'}</td>
                   <td><span className={`badge ${getStatusClass(p.status)}`}>{p.status}</span></td>
                   <td>{formatDate(p.createdAt)}</td>

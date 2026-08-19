@@ -1,9 +1,10 @@
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const ProtectedRoute = ({ allowedRoles, children }) => {
   const { user, loading, mustChangePassword, getDashboardPath } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -19,7 +20,7 @@ const ProtectedRoute = ({ allowedRoles, children }) => {
     return <Navigate to={getDashboardPath(user.role)} replace />;
   }
 
-  if (mustChangePassword && !window.location.pathname.includes('change-password')) {
+  if (mustChangePassword && !location.pathname.includes('change-password')) {
     return <Navigate to="/change-password" replace />;
   }
 

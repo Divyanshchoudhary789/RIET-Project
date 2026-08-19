@@ -56,6 +56,9 @@
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   margin-top: 6px;
   font-style: italic;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 100%;
 }
 
 .timeline-time {
@@ -413,15 +416,18 @@ button:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
   flex-shrink: 0;
 }
 
-.drawer-title { font-size: var(--font-size-base); font-weight: 600; }
+.drawer-title { font-size: var(--font-size-base); font-weight: 600; word-break: break-word; }
 
 .drawer-body {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--space-6);
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .drawer-section-title {
@@ -431,6 +437,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: var(--space-3);
+  word-break: break-word;
 }
 
 .drawer-field {
@@ -438,6 +445,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
   flex-direction: column;
   gap: 4px;
   margin-bottom: var(--space-3);
+  min-width: 0;
 }
 
 .drawer-field-label {
@@ -451,6 +459,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 .drawer-field-value {
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .drawer-footer {

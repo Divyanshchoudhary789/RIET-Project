@@ -63,11 +63,36 @@ export const formatCurrency = (amount) => {
 
 /**
  * Extract error message from an axios error.
+ * Handles Joi validation arrays, single message strings, and network errors.
  */
 export const getErrorMessage = (error) => {
+  const data = error?.response?.data;
+
+  // Joi validation error — comes as { message: 'Validation failed.', errors: [{ field, message }] }
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    const first = data.errors[0];
+    // Build a contextual label from the field path
+    // e.g. "quotations[0].validity" → "Quotation #1 Validity"
+    const fieldLabel = first?.field
+      ? (() => {
+          const f = first.field;
+          // quotations[N].fieldName → "Quotation #N+1: fieldName"
+          const qMatch = f.match(/^quotations\[(\d+)\]\.?(.*)$/);
+          if (qMatch) {
+            const num = parseInt(qMatch[1], 10) + 1;
+            const sub = qMatch[2]
+              ? qMatch[2].replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())
+              : '';
+            return sub ? `Quotation #${num} — ${sub}: ` : `Quotation #${num}: `;
+          }
+          return '';
+        })()
+      : '';
+    return fieldLabel + (first?.message || 'Validation error.');
+  }
+
   return (
-    error?.response?.data?.message ||
-    error?.response?.data?.errors?.[0]?.message ||
+    data?.message ||
     error?.message ||
     'An unexpected error occurred.'
   );

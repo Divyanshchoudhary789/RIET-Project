@@ -28,7 +28,7 @@ const DepartmentsList = () => {
       const r = await api.get(`/api/departments?${p}`);
       const d = r.data.data;
       setItems(Array.isArray(d) ? d : (d?.departments || []));
-      setTotal(r.data.total || d?.total || 0);
+      setTotal(r.data.meta?.total || r.data.total || 0);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

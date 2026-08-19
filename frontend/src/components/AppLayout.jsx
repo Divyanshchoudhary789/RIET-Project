@@ -1,16 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
-  Bell, ChevronDown, LayoutDashboard, LogOut, Menu, X,
+  Bell, LayoutDashboard, LogOut, Menu, X,
   FilePlus2, FileText, Users, Building2, Briefcase,
   ClipboardList, Package, ShoppingCart, BarChart2,
-  CheckSquare, FileCheck, Archive,
+  FileCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { getRoleLabel, getDashboardPath } from '../utils/helpers';
-import { getSocket } from '../utils/socket';
+import { getRoleLabel, getDashboardPath, timeAgo } from '../utils/helpers';
+import useSocketEvent from '../hooks/useSocketEvent';
 import api from '../utils/api';
-import { timeAgo } from '../utils/helpers';
 import '../styles/layout.css';
 
 const NAV_CONFIG = {
@@ -57,10 +56,36 @@ const NAV_CONFIG = {
     { label: 'Dashboard', path: '/accounts', icon: LayoutDashboard, end: true },
     { label: 'Memos', path: '/accounts/memos', icon: Briefcase },
     { label: 'Purchase Orders', path: '/accounts/purchase-orders', icon: ShoppingCart },
+    { label: 'Stock', path: '/accounts/stock', icon: Package },
   ],
 };
 
-const NotificationPanel = ({ onClose }) => {
+const NOTIF_NAV_MAP = {
+  Requirement:    (id, role) => {
+    const paths = { center_head: '/center-head/requirements', cluster_manager: '/cluster-manager/requirements' };
+    return paths[role] || null;
+  },
+  WorkProposal:   (id, role) => {
+    const paths = { cluster_manager: '/cluster-manager/proposals', department_admin: '/department-admin/proposals' };
+    return paths[role] || null;
+  },
+  Assessment:     (id, role) => {
+    const paths = { department_admin: '/department-admin/assessments', director: '/director/assessments', po_office: '/po-office/assessments' };
+    return paths[role] || null;
+  },
+  Notesheet:      (id, role) => {
+    const paths = { po_office: '/po-office/notesheets', director: '/director/notesheets' };
+    return paths[role] || null;
+  },
+  Memo:           (id, role) => {
+    const paths = { accounts: '/accounts/memos', chairperson: '/chairperson/memos', director: '/director/memos' };
+    return paths[role] || null;
+  },
+  PurchaseOrder:  (id) => id ? `/accounts/purchase-orders/${id}` : '/accounts/purchase-orders',
+};
+
+const NotificationPanel = ({ onClose, userRole }) => {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const ref = useRef(null);
@@ -94,6 +119,25 @@ const NotificationPanel = ({ onClose }) => {
     } catch { /* ignore */ }
   };
 
+  const handleNotifClick = async (n) => {
+    // Mark as read if unread
+    if (!n.isRead) {
+      try {
+        await api.patch(`/api/notifications/${n._id}/read`);
+        setNotifications((p) => p.map((x) => x._id === n._id ? { ...x, isRead: true } : x));
+      } catch { /* ignore */ }
+    }
+    // Navigate to the document
+    if (n.documentType && n.documentId) {
+      const navFn = NOTIF_NAV_MAP[n.documentType];
+      if (navFn) {
+        const path = navFn(n.documentId, userRole);
+        if (path) { onClose(); navigate(path); return; }
+      }
+    }
+    onClose();
+  };
+
   return (
     <div className="notif-panel" ref={ref}>
       <div className="notif-panel-header">
@@ -107,7 +151,15 @@ const NotificationPanel = ({ onClose }) => {
           <div className="notif-empty">No notifications</div>
         ) : (
           notifications.map((n) => (
-            <div key={n._id} className={`notif-item${n.isRead ? '' : ' notif-item-unread'}`}>
+            <div
+              key={n._id}
+              className={`notif-item${n.isRead ? '' : ' notif-item-unread'}`}
+              onClick={() => handleNotifClick(n)}
+              style={{ cursor: 'pointer' }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && handleNotifClick(n)}
+            >
               <div className="notif-item-title">{n.title}</div>
               <div className="notif-item-msg">{n.message}</div>
               <div className="notif-item-time">{timeAgo(n.createdAt)}</div>
@@ -145,17 +197,12 @@ const AppLayout = () => {
       } catch { /* ignore */ }
     };
     fetchCount();
-
-    const socket = getSocket();
-    if (socket) {
-      socket.on('notification:new', () => {
-        setUnreadCount((c) => c + 1);
-      });
-    }
-    return () => {
-      socket?.off('notification:new');
-    };
   }, []);
+
+  // Increment badge on every new notification — works even if socket connected after mount
+  useSocketEvent('notification:new', () => {
+    setUnreadCount((c) => c + 1);
+  });
 
   const handleLogout = async () => {
     await logout();
@@ -237,7 +284,7 @@ const AppLayout = () => {
                   <span className="notif-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
                 )}
               </button>
-              {notifOpen && <NotificationPanel onClose={() => setNotifOpen(false)} />}
+              {notifOpen && <NotificationPanel onClose={() => setNotifOpen(false)} userRole={user?.role} />}
             </div>
 
             <button className="topbar-icon-btn hide-mobile" onClick={handleLogout} title="Sign out">

@@ -194,6 +194,7 @@ const App = () => (
             <Route path="memos" element={<AccountsMemos />} />
             <Route path="purchase-orders" element={<PurchaseOrdersList />} />
             <Route path="purchase-orders/:id" element={<PurchaseOrderDetail />} />
+            <Route path="stock" element={<StockPage />} />
           </Route>
 
           {/* Catch-all */}

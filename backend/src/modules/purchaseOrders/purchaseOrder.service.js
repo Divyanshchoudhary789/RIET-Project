@@ -3,7 +3,7 @@ const Memo = require('../memos/memo.model');
 const Requirement = require('../requirements/requirement.model');
 const StockItem = require('../stock/stockItem.model');
 const { buildTimelineEntry } = require('../../utils/timeline');
-const { createNotification, notifyMany } = require('../notifications/notification.service');
+const { createNotification, notifyMany, emitDashboardRefresh } = require('../notifications/notification.service');
 const { generatePoNumber } = require('../../utils/generatePoNumber');
 const { DOCUMENT_STATUS, TIMELINE_ACTIONS, ROLES } = require('../../config/constants');
 const { getPaginationParams, buildPaginationMeta } = require('../../utils/pagination');
@@ -13,7 +13,11 @@ const listPurchaseOrders = async (query) => {
   const { page, limit, skip } = getPaginationParams(query);
   const filter = {};
   if (query.status) filter.status = query.status;
-
+  // Support vendor name / PO number search
+  if (query.search) {
+    const regex = new RegExp(query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [{ vendorName: regex }, { poNumber: regex }];
+  }
   const [orders, total] = await Promise.all([
     PurchaseOrder.find(filter)
       .populate('memoRef', 'summary status')
@@ -24,7 +28,6 @@ const listPurchaseOrders = async (query) => {
       .limit(limit),
     PurchaseOrder.countDocuments(filter),
   ]);
-
   return { orders, meta: buildPaginationMeta(page, limit, total) };
 };
 
@@ -32,40 +35,50 @@ const getPurchaseOrderById = async (orderId) => {
   const order = await PurchaseOrder.findById(orderId)
     .populate({
       path: 'memoRef',
-      populate: {
-        path: 'notesheetRef',
-        populate: { path: 'assessmentRef', select: 'estimatedCost feasibilityNotes' },
-      },
+      populate: [
+        { path: 'createdBy', select: 'name email role' },
+        { path: 'decidedBy', select: 'name email role' },
+        {
+          path: 'notesheetRef',
+          populate: {
+            path: 'assessmentRef',
+            select: 'estimatedCost feasibilityNotes technicalRemarks recommendedAction workProposalRef',
+            populate: {
+              path: 'workProposalRef',
+              select: 'title requirementRefs',
+              populate: {
+                path: 'requirementRefs',
+                select: 'items campusRef',
+                populate: { path: 'campusRef', select: 'name code' },
+              },
+            },
+          },
+        },
+      ],
     })
-    .populate('createdBy', 'name email')
-    .populate('receivedBy', 'name email')
+    .populate('createdBy', 'name email role')
+    .populate('receivedBy', 'name email role')
     .populate({ path: 'timeline.actor', select: 'name email role' });
-
   if (!order) {
     const error = new Error('Purchase order not found.');
     error.statusCode = 404;
     throw error;
   }
-
   return order;
 };
 
 const createPurchaseOrder = async (data, accountsUser) => {
   const memo = await Memo.findById(data.memoRef).populate('createdBy', 'name email');
-
   if (!memo) {
     const error = new Error('Memo not found.');
     error.statusCode = 404;
     throw error;
   }
-
   if (memo.status !== DOCUMENT_STATUS.APPROVED) {
     const error = new Error('Purchase orders can only be created against Chairperson-approved memos.');
     error.statusCode = 400;
     throw error;
   }
-
-  // Idempotency guard — prevent duplicate POs against the same memo
   const existingPO = await PurchaseOrder.findOne({ memoRef: data.memoRef });
   if (existingPO) {
     const error = new Error('A Purchase Order already exists for this memo.');
@@ -74,7 +87,6 @@ const createPurchaseOrder = async (data, accountsUser) => {
   }
 
   const poNumber = await generatePoNumber();
-
   const order = await PurchaseOrder.create({
     memoRef: data.memoRef,
     poNumber,
@@ -102,19 +114,22 @@ const createPurchaseOrder = async (data, accountsUser) => {
     });
   }
 
+  emitDashboardRefresh(
+    [ROLES.ACCOUNTS, ROLES.DIRECTOR],
+    'purchaseOrder',
+    { action: 'created', id: order._id }
+  );
+
   return order;
 };
 
 const uploadPerformaInvoice = async (orderId, piAttachmentUrl, accountsUser) => {
   const order = await PurchaseOrder.findById(orderId);
-
   if (!order) {
     const error = new Error('Purchase order not found.');
     error.statusCode = 404;
     throw error;
   }
-
-  // Allow re-upload if previously uploaded (e.g. wrong file) as long as goods not yet received
   if (order.status === 'received' || order.status === 'closed') {
     const error = new Error('Cannot upload a Performa Invoice against a closed or received Purchase Order.');
     error.statusCode = 400;
@@ -123,18 +138,14 @@ const uploadPerformaInvoice = async (orderId, piAttachmentUrl, accountsUser) => 
 
   order.piAttachmentUrl = piAttachmentUrl;
   order.status = 'pi_uploaded';
-  order.timeline.push(
-    buildTimelineEntry(accountsUser, TIMELINE_ACTIONS.FORWARDED, 'Performa Invoice uploaded')
-  );
+  order.timeline.push(buildTimelineEntry(accountsUser, TIMELINE_ACTIONS.FORWARDED, 'Performa Invoice uploaded'));
   await order.save();
+
+  emitDashboardRefresh(ROLES.ACCOUNTS, 'purchaseOrder', { action: 'pi_uploaded', id: order._id });
 
   return order;
 };
 
-/**
- * Marks goods as received, closes the PO, updates stock at destination campus,
- * and marks all upstream requirements as closed.
- */
 const markGoodsReceived = async (orderId, note, receivedByUser) => {
   const order = await PurchaseOrder.findById(orderId)
     .populate({
@@ -145,22 +156,16 @@ const markGoodsReceived = async (orderId, note, receivedByUser) => {
           path: 'assessmentRef',
           populate: {
             path: 'workProposalRef',
-            populate: {
-              path: 'requirementRefs',
-              select: 'items campusRef',
-              populate: { path: 'campusRef', select: '_id name code' },
-            },
+            populate: { path: 'requirementRefs', select: 'items campusRef', populate: { path: 'campusRef', select: '_id name code' } },
           },
         },
       },
     });
-
   if (!order) {
     const error = new Error('Purchase order not found.');
     error.statusCode = 404;
     throw error;
   }
-
   if (order.status === 'closed') {
     const error = new Error('This purchase order has already been closed.');
     error.statusCode = 400;
@@ -168,76 +173,36 @@ const markGoodsReceived = async (orderId, note, receivedByUser) => {
   }
 
   const receivedNote = note || 'Goods received at destination';
-  const timelineEntry = buildTimelineEntry(receivedByUser, TIMELINE_ACTIONS.RECEIVED, receivedNote);
-
-  // 1. Close the PO
   order.status = 'closed';
   order.receivedAt = new Date();
   order.receivedBy = receivedByUser._id;
-  order.timeline.push(timelineEntry);
+  order.timeline.push(buildTimelineEntry(receivedByUser, TIMELINE_ACTIONS.RECEIVED, receivedNote));
   await order.save();
 
-  // 2. Walk the chain: close all upstream requirements and update stock
   const requirements = order.memoRef?.notesheetRef?.assessmentRef?.workProposalRef?.requirementRefs || [];
-
   for (const req of requirements) {
-    // Use $set + $push as separate operators — never mix plain-field updates with update operators
     await Requirement.findByIdAndUpdate(req._id, {
       $set: { status: DOCUMENT_STATUS.CLOSED },
-      $push: {
-        timeline: buildTimelineEntry(
-          receivedByUser,
-          TIMELINE_ACTIONS.RECEIVED,
-          'Goods received — requirement fulfilled'
-        ),
-      },
+      $push: { timeline: buildTimelineEntry(receivedByUser, TIMELINE_ACTIONS.RECEIVED, 'Goods received — requirement fulfilled') },
     });
 
-    // 3. Increment stock for every item in the requirement at the destination campus
     if (req.campusRef?._id) {
       for (const item of req.items || []) {
         await StockItem.findOneAndUpdate(
+          { ownerType: 'campus', ownerRef: req.campusRef._id, itemName: item.name },
+          { $inc: { quantityAvailable: item.quantity }, $set: { updatedBy: receivedByUser._id } },
           {
-            ownerType: 'campus',
-            ownerRef: req.campusRef._id,
-            itemName: item.name,
-          },
-          {
-            $inc: { quantityAvailable: item.quantity },
-            $set: { updatedBy: receivedByUser._id },
-          },
-          {
-            // upsert: true — create a stock record if one doesn't exist yet for this item
-            upsert: true,
-            new: true,
-            setOnInsert: {
-              ownerModel: 'Campus',
-              category: 'Received',
-              unit: item.unit || 'units',
-              quantityReserved: 0,
-              reorderThreshold: 0,
-            },
+            upsert: true, new: true,
+            setOnInsert: { ownerModel: 'Campus', category: 'Received', unit: item.unit || 'units', quantityReserved: 0, reorderThreshold: 0 },
           }
         );
       }
     }
   }
 
-  // 4. Notify Center Heads of affected campuses
-  const campusIds = [
-    ...new Set(
-      requirements
-        .map((r) => r.campusRef?._id?.toString())
-        .filter(Boolean)
-    ),
-  ];
-
+  const campusIds = [...new Set(requirements.map((r) => r.campusRef?._id?.toString()).filter(Boolean))];
   for (const campusId of campusIds) {
-    const centerHeads = await User.find({
-      role: ROLES.CENTER_HEAD,
-      scopeRef: campusId,
-      isActive: true,
-    });
+    const centerHeads = await User.find({ role: ROLES.CENTER_HEAD, scopeRef: campusId, isActive: true });
     await notifyMany(centerHeads, {
       type: 'goods_received',
       title: 'Goods Received',
@@ -248,13 +213,13 @@ const markGoodsReceived = async (orderId, note, receivedByUser) => {
     });
   }
 
+  emitDashboardRefresh(
+    [ROLES.ACCOUNTS, ROLES.CENTER_HEAD, ROLES.DIRECTOR, ROLES.CHAIRPERSON],
+    'purchaseOrder',
+    { action: 'goods_received', id: order._id }
+  );
+
   return order;
 };
 
-module.exports = {
-  listPurchaseOrders,
-  getPurchaseOrderById,
-  createPurchaseOrder,
-  uploadPerformaInvoice,
-  markGoodsReceived,
-};
+module.exports = { listPurchaseOrders, getPurchaseOrderById, createPurchaseOrder, uploadPerformaInvoice, markGoodsReceived };

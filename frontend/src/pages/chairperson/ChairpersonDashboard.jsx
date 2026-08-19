@@ -1,32 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Briefcase, Users, Package, CheckCircle2, ArrowRight, Eye } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate } from '../../utils/helpers';
+import useSocketEvent from '../../hooks/useSocketEvent';
 import DocumentDrawer from '../../components/DocumentDrawer';
 import RejectModal from '../../components/RejectModal';
 import '../../styles/pages.css';
 
 const ChairpersonDashboard = () => {
   const navigate = useNavigate();
-
-  const [stats, setStats] = useState({
-    pendingMemos: 0,
-    approvedMemos: 0,
-    rejectedMemos: 0,
-    totalUsers: 0,
-    totalStockItems: 0,
-  });
-
+  const [stats, setStats] = useState({ pendingMemos: 0, approvedMemos: 0, rejectedMemos: 0, totalUsers: 0, totalStockItems: 0 });
   const [pendingMemosList, setPendingMemosList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
   const [selectedMemo, setSelectedMemo] = useState(null);
   const [rejectingMemoId, setRejectingMemoId] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -35,15 +27,10 @@ const ChairpersonDashboard = () => {
         api.get('/api/users?limit=1'),
         api.get('/api/stock?limit=1'),
       ]);
-
-      const memos = Array.isArray(memosRes.data.data)
-        ? memosRes.data.data
-        : memosRes.data.data?.memos || [];
-
-      const pending = memos.filter((m) => m.status === 'submitted' || m.status === 'under_review');
+      const memos = Array.isArray(memosRes.data.data) ? memosRes.data.data : memosRes.data.data?.memos || [];
+      const pending  = memos.filter((m) => m.status === 'submitted' || m.status === 'under_review');
       const approved = memos.filter((m) => m.status === 'approved');
       const rejected = memos.filter((m) => m.status === 'rejected');
-
       setStats({
         pendingMemos: pending.length,
         approvedMemos: approved.length,
@@ -51,25 +38,26 @@ const ChairpersonDashboard = () => {
         totalUsers: usersRes.data?.total || usersRes.data?.data?.length || 0,
         totalStockItems: stockRes.data?.total || stockRes.data?.data?.length || 0,
       });
-
       setPendingMemosList(pending);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchDashboardData();
   }, []);
+
+  useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
+
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (['memo', 'purchaseOrder'].includes(payload?.entity)) fetchDashboardData();
+  });
 
   const handleApproveMemo = async (memoId) => {
     setActionLoading(true);
     try {
       await api.patch(`/api/memos/${memoId}/decide`, { action: 'approve' });
       setSelectedMemo(null);
-      await fetchDashboardData();
+      fetchDashboardData();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -84,7 +72,7 @@ const ChairpersonDashboard = () => {
       await api.patch(`/api/memos/${rejectingMemoId}/decide`, { action: 'reject', note });
       setRejectingMemoId(null);
       setSelectedMemo(null);
-      await fetchDashboardData();
+      fetchDashboardData();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -103,50 +91,25 @@ const ChairpersonDashboard = () => {
 
       {error && <div className="page-error" style={{ marginBottom: 20 }}>{error}</div>}
 
-      {/* KPI Grid */}
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: 24 }}>
         <div className="stat-card" onClick={() => navigate('/chairperson/memos')} style={{ cursor: 'pointer' }}>
-          <div className="stat-icon" style={{ background: 'rgba(234, 179, 8, 0.15)', color: '#d97706' }}>
-            <Briefcase size={22} />
-          </div>
-          <div className="stat-info">
-            <span className="stat-label">Pending Memos</span>
-            <span className="stat-value">{stats.pendingMemos}</span>
-          </div>
+          <div className="stat-icon" style={{ background: 'rgba(234,179,8,0.15)', color: '#d97706' }}><Briefcase size={22} /></div>
+          <div className="stat-info"><span className="stat-label">Pending Memos</span><span className="stat-value">{stats.pendingMemos}</span></div>
         </div>
-
         <div className="stat-card" onClick={() => navigate('/chairperson/memos')} style={{ cursor: 'pointer' }}>
-          <div className="stat-icon" style={{ background: 'rgba(22, 163, 74, 0.15)', color: '#16a34a' }}>
-            <CheckCircle2 size={22} />
-          </div>
-          <div className="stat-info">
-            <span className="stat-label">Approved Memos</span>
-            <span className="stat-value">{stats.approvedMemos}</span>
-          </div>
+          <div className="stat-icon" style={{ background: 'rgba(22,163,74,0.15)', color: '#16a34a' }}><CheckCircle2 size={22} /></div>
+          <div className="stat-info"><span className="stat-label">Approved Memos</span><span className="stat-value">{stats.approvedMemos}</span></div>
         </div>
-
         <div className="stat-card" onClick={() => navigate('/chairperson/users')} style={{ cursor: 'pointer' }}>
-          <div className="stat-icon" style={{ background: 'rgba(37, 99, 235, 0.15)', color: '#2563eb' }}>
-            <Users size={22} />
-          </div>
-          <div className="stat-info">
-            <span className="stat-label">Total Users</span>
-            <span className="stat-value">{stats.totalUsers}</span>
-          </div>
+          <div className="stat-icon" style={{ background: 'rgba(37,99,235,0.15)', color: '#2563eb' }}><Users size={22} /></div>
+          <div className="stat-info"><span className="stat-label">Total Users</span><span className="stat-value">{stats.totalUsers}</span></div>
         </div>
-
         <div className="stat-card" onClick={() => navigate('/chairperson/stock')} style={{ cursor: 'pointer' }}>
-          <div className="stat-icon" style={{ background: 'rgba(124, 58, 237, 0.15)', color: '#7c3aed' }}>
-            <Package size={22} />
-          </div>
-          <div className="stat-info">
-            <span className="stat-label">Total Stock Items</span>
-            <span className="stat-value">{stats.totalStockItems}</span>
-          </div>
+          <div className="stat-icon" style={{ background: 'rgba(124,58,237,0.15)', color: '#7c3aed' }}><Package size={22} /></div>
+          <div className="stat-info"><span className="stat-label">Total Stock Items</span><span className="stat-value">{stats.totalStockItems}</span></div>
         </div>
       </div>
 
-      {/* Pending Memos Section */}
       <div className="section-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
           <h2 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, margin: 0 }}>
@@ -156,64 +119,42 @@ const ChairpersonDashboard = () => {
             View All Memos <ArrowRight size={14} />
           </button>
         </div>
-
         <div className="table-wrap">
           <table className="table">
             <thead>
-              <tr>
-                <th>Reference</th>
-                <th>Summary</th>
-                <th>Recommended Vendor</th>
-                <th>Submitted Date</th>
-                <th>Actions</th>
-              </tr>
+              <tr><th>Reference</th><th>Summary</th><th>Recommended Vendor</th><th>Submitted Date</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></td>
-                </tr>
+                <tr><td colSpan={5} style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></td></tr>
               ) : pendingMemosList.length === 0 ? (
-                <tr>
-                  <td colSpan={5}>
-                    <div className="empty-state" style={{ padding: 48 }}>
-                      <CheckCircle2 size={24} color="var(--color-success)" style={{ marginBottom: 8 }} />
-                      <h3>No pending memos for review</h3>
-                      <p>All submitted memos have been processed.</p>
+                <tr><td colSpan={5}>
+                  <div className="empty-state" style={{ padding: 48 }}>
+                    <CheckCircle2 size={24} color="var(--color-success)" style={{ marginBottom: 8 }} />
+                    <h3>No pending memos for review</h3>
+                    <p>All submitted memos have been processed.</p>
+                  </div>
+                </td></tr>
+              ) : pendingMemosList.map((m) => (
+                <tr key={m._id}>
+                  <td style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{m.referenceNumber || m._id?.slice(-8)}</td>
+                  <td>{m.summary ? (m.summary.length > 50 ? m.summary.slice(0, 50) + '...' : m.summary) : '—'}</td>
+                  <td>{m.recommendedVendor || '—'}</td>
+                  <td>{formatDate(m.createdAt)}</td>
+                  <td>
+                    <div className="actions-cell">
+                      <button className="action-btn action-view" onClick={() => setSelectedMemo(m)}><Eye size={13} /> View</button>
+                      <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => handleApproveMemo(m._id)}>Approve</button>
+                      <button className="btn btn-danger"  style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setRejectingMemoId(m._id)}>Reject</button>
                     </div>
                   </td>
                 </tr>
-              ) : (
-                pendingMemosList.map((m) => (
-                  <tr key={m._id}>
-                    <td style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                      {m.referenceNumber || m._id?.slice(-8)}
-                    </td>
-                    <td>{m.summary ? (m.summary.length > 50 ? m.summary.slice(0, 50) + '...' : m.summary) : '—'}</td>
-                    <td>{m.recommendedVendor || '—'}</td>
-                    <td>{formatDate(m.createdAt)}</td>
-                    <td>
-                      <div className="actions-cell">
-                        <button className="action-btn action-view" onClick={() => setSelectedMemo(m)}>
-                          <Eye size={13} /> View
-                        </button>
-                        <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => handleApproveMemo(m._id)}>
-                          Approve
-                        </button>
-                        <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setRejectingMemoId(m._id)}>
-                          Reject
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Drawer */}
       {selectedMemo && (
         <DocumentDrawer
           doc={selectedMemo}
@@ -222,9 +163,7 @@ const ChairpersonDashboard = () => {
           footer={
             selectedMemo.status === 'submitted' || selectedMemo.status === 'under_review' ? (
               <div style={{ display: 'flex', gap: 12, width: '100%', justifyContent: 'flex-end' }}>
-                <button className="btn btn-danger" onClick={() => setRejectingMemoId(selectedMemo._id)} disabled={actionLoading}>
-                  Reject Memo
-                </button>
+                <button className="btn btn-danger"  onClick={() => setRejectingMemoId(selectedMemo._id)} disabled={actionLoading}>Reject Memo</button>
                 <button className="btn btn-primary" onClick={() => handleApproveMemo(selectedMemo._id)} disabled={actionLoading}>
                   {actionLoading ? <span className="spinner spinner-sm" /> : null} Approve Memo
                 </button>
@@ -234,14 +173,8 @@ const ChairpersonDashboard = () => {
         />
       )}
 
-      {/* Reject Modal */}
       {rejectingMemoId && (
-        <RejectModal
-          title="Reject Memo"
-          loading={actionLoading}
-          onConfirm={handleRejectMemoConfirm}
-          onClose={() => setRejectingMemoId(null)}
-        />
+        <RejectModal title="Reject Memo" loading={actionLoading} onConfirm={handleRejectMemoConfirm} onClose={() => setRejectingMemoId(null)} />
       )}
     </div>
   );

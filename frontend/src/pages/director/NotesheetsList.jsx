@@ -4,6 +4,7 @@ import { Search, Eye, Plus, XCircle, X } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass } from '../../utils/helpers';
 import DocumentDetail from '../../components/DocumentDetail';
+import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
 const NotesheetsList = () => {
@@ -35,7 +36,7 @@ const NotesheetsList = () => {
       const r = await api.get(`/api/notesheets?${p}`);
       const d = r.data.data;
       setItems(Array.isArray(d) ? d : (d?.notesheets || []));
-      setTotal(r.data.total || d?.total || 0);
+      setTotal(r.data.meta?.total || r.data.total || 0);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -44,6 +45,10 @@ const NotesheetsList = () => {
   }, [page, search, statusFilter]);
 
   useEffect(() => { fetch(); }, [fetch]);
+
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (['notesheet', 'memo'].includes(payload?.entity)) fetch();
+  });
 
   const handleCreateMemo = async (notesheet) => {
     setActionLoading((p) => ({ ...p, [`memo_${notesheet._id}`]: true }));
@@ -116,7 +121,7 @@ const NotesheetsList = () => {
               ) : items.map((n) => (
                 <tr key={n._id}>
                   <td style={{ fontWeight:500, color:'var(--color-text-primary)' }}>{n.referenceNumber || n._id?.slice(-8)}</td>
-                  <td>{n.preparedBy?.name || '—'}</td>
+                  <td>{n.preparedBy?.name || n.createdBy?.name || '—'}</td>
                   <td><span className={`badge ${getStatusClass(n.status)}`}>{n.status}</span></td>
                   <td>{formatDate(n.createdAt)}</td>
                   <td>

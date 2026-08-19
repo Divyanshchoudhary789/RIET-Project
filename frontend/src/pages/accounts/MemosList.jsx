@@ -4,6 +4,7 @@ import { Search, Eye, ShoppingCart, X, Send } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate } from '../../utils/helpers';
 import DocumentDrawer from '../../components/DocumentDrawer';
+import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
 const MemosList = () => {
@@ -40,6 +41,10 @@ const MemosList = () => {
   useEffect(() => {
     fetchApprovedMemos();
   }, [fetchApprovedMemos]);
+
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (['memo', 'purchaseOrder'].includes(payload?.entity)) fetchApprovedMemos();
+  });
 
   const openPoModal = (memo) => {
     setPoTargetMemo(memo);

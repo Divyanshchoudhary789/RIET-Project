@@ -52,7 +52,7 @@ const UsersList = () => {
       const r = await api.get(`/api/users?${p}`);
       const d = r.data.data;
       setItems(Array.isArray(d) ? d : (d?.users || []));
-      setTotal(r.data.total || d?.total || 0);
+      setTotal(r.data.meta?.total || r.data.total || 0);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

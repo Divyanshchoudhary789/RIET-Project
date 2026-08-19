@@ -74,4 +74,11 @@ const purchaseOrderSchema = new mongoose.Schema(
 purchaseOrderSchema.index({ status: 1, createdAt: -1 });
 purchaseOrderSchema.index({ memoRef: 1 });
 
+// Human-readable reference derived from _id
+purchaseOrderSchema.virtual('referenceNumber').get(function () {
+  return this.poNumber || `PO-${this._id.toString().slice(-8).toUpperCase()}`;
+});
+purchaseOrderSchema.set('toJSON', { virtuals: true });
+purchaseOrderSchema.set('toObject', { virtuals: true });
+
 module.exports = mongoose.model('PurchaseOrder', purchaseOrderSchema);

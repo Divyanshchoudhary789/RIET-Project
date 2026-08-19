@@ -12,21 +12,24 @@ const listUsers = async (requestingUser, query) => {
 
   const filter = {};
 
-  if (query.role) filter.role = query.role;
   if (query.isActive !== undefined) filter.isActive = query.isActive === 'true';
 
+  // Search by name or email
+  if (query.search) {
+    const regex = new RegExp(query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [{ name: regex }, { email: regex }];
+  }
+
   // Director sees everyone except other directors and chairperson
-  // The role query filter is allowed within that constraint but cannot override it.
   if (requestingUser.role === ROLES.DIRECTOR) {
     const directorExclusions = [ROLES.CHAIRPERSON, ROLES.DIRECTOR];
     if (query.role && !directorExclusions.includes(query.role)) {
       filter.role = query.role;
-    } else if (!query.role) {
-      filter.role = { $nin: directorExclusions };
     } else {
-      // Attempted to query for a role Director is not allowed to see — return empty
       filter.role = { $nin: directorExclusions };
     }
+  } else if (query.role) {
+    filter.role = query.role;
   }
 
   const [users, total] = await Promise.all([

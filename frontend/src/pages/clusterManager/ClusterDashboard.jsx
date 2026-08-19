@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FilePlus2, Eye, XCircle, CheckSquare } from 'lucide-react';
 import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate, getErrorMessage, getStatusClass, getPriorityClass } from '../../utils/helpers';
+import useSocketEvent from '../../hooks/useSocketEvent';
 import RejectModal from '../../components/RejectModal';
 import DocumentDrawer from '../../components/DocumentDrawer';
 import '../../styles/pages.css';
@@ -19,7 +20,7 @@ const ClusterDashboard = () => {
   const [rejectTarget, setRejectTarget] = useState(null);
   const [rejecting, setRejecting] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [reqRes, statsRes] = await Promise.all([
@@ -33,9 +34,14 @@ const ClusterDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  // Re-fetch on any requirement or workProposal change
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (['requirement', 'workProposal'].includes(payload?.entity)) load();
+  });
 
   const handleReject = async (note) => {
     setRejecting(true);

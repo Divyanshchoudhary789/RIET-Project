@@ -58,4 +58,11 @@ workProposalSchema.index({ status: 1, createdAt: -1 });
 workProposalSchema.index({ createdBy: 1 });
 workProposalSchema.index({ departmentRefs: 1, status: 1 });
 
+// Human-readable reference derived from _id
+workProposalSchema.virtual('referenceNumber').get(function () {
+  return `WP-${this._id.toString().slice(-8).toUpperCase()}`;
+});
+workProposalSchema.set('toJSON', { virtuals: true });
+workProposalSchema.set('toObject', { virtuals: true });
+
 module.exports = mongoose.model('WorkProposal', workProposalSchema);
