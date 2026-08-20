@@ -18,6 +18,15 @@ const createCampusSchema = Joi.object({
 
 const updateCampusSchema = Joi.object({
   name: Joi.string().min(2).max(100).trim().optional(),
+  code: Joi.string().min(2).max(20).uppercase().trim().optional(),
+  location: Joi.string().max(200).trim().optional().allow('', null),
+  centerHeadRef: Joi.string().hex().length(24).optional().allow(null),
+  centerHeadData: Joi.object({
+    name: Joi.string().min(2).max(100).trim().required(),
+    email: Joi.string().email().required(),
+  })
+    .optional()
+    .allow(null),
   isActive: Joi.boolean().optional(),
 });
 

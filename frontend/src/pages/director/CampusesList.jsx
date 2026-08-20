@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Building2, Plus, X, Search, Info } from 'lucide-react';
+import { Building2, Plus, X, Search, Info, Edit2, MapPin, User } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate } from '../../utils/helpers';
 import '../../styles/pages.css';
@@ -23,6 +23,18 @@ const CampusesList = () => {
   });
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
+
+  const [showEdit, setShowEdit] = useState(false);
+  const [editCampusId, setEditCampusId] = useState(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    code: '',
+    location: '',
+    centerHeadName: '',
+    centerHeadEmail: '',
+  });
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState('');
 
   const fetchCampuses = useCallback(async () => {
     setLoading(true);
@@ -82,6 +94,54 @@ const CampusesList = () => {
     }
   };
 
+  const handleOpenEdit = (campus) => {
+    setEditCampusId(campus._id);
+    setEditForm({
+      name: campus.name || '',
+      code: campus.code || '',
+      location: campus.location || '',
+      centerHeadName: campus.centerHeadRef?.name || '',
+      centerHeadEmail: campus.centerHeadRef?.email || '',
+    });
+    setEditError('');
+    setShowEdit(true);
+  };
+
+  const handleEdit = async (e) => {
+    e.preventDefault();
+    setEditError('');
+
+    if (!editForm.name.trim()) {
+      setEditError('Campus name is required.');
+      return;
+    }
+
+    setEditLoading(true);
+    try {
+      const payload = {
+        name: editForm.name.trim(),
+        code: editForm.code.trim().toUpperCase(),
+        location: editForm.location.trim(),
+      };
+
+      // Provision center head if email/name entered and different or newly added
+      if (editForm.centerHeadEmail.trim() && editForm.centerHeadName.trim()) {
+        payload.centerHeadData = {
+          name: editForm.centerHeadName.trim(),
+          email: editForm.centerHeadEmail.trim().toLowerCase(),
+        };
+      }
+
+      await api.patch(`/api/campuses/${editCampusId}`, payload);
+      setShowEdit(false);
+      fetchCampuses();
+    } catch (err) {
+      setEditError(getErrorMessage(err));
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const totalPages = Math.ceil(total / limit) || 1;
 
   return (
@@ -131,18 +191,19 @@ const CampusesList = () => {
                 <th>Location</th>
                 <th>Center Head</th>
                 <th>Created</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: 40 }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: 40 }}>
                     <span className="spinner" />
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <div className="empty-state" style={{ padding: 48 }}>
                       <div className="empty-state-icon">
                         <Building2 size={22} />
@@ -165,9 +226,42 @@ const CampusesList = () => {
                         {c.code || '—'}
                       </span>
                     </td>
-                    <td>{c.location || '—'}</td>
-                    <td>{c.centerHeadRef?.name || '—'}</td>
+                    <td>
+                      {c.location ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <MapPin size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                          <span>{c.location}</span>
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td>
+                      {c.centerHeadRef ? (
+                        <div>
+                          <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>
+                            {c.centerHeadRef.name}
+                          </div>
+                          {c.centerHeadRef.email && (
+                            <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                              {c.centerHeadRef.email}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td>{formatDate(c.createdAt)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => handleOpenEdit(c)}
+                        title="Edit Campus Details"
+                      >
+                        <Edit2 size={14} /> Edit
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -198,6 +292,7 @@ const CampusesList = () => {
         )}
       </div>
 
+      {/* Add Modal */}
       {showAdd && (
         <div className="modal-overlay">
           <div className="modal" style={{ maxWidth: 520 }}>
@@ -322,6 +417,119 @@ const CampusesList = () => {
                 <button type="submit" className="btn btn-primary" disabled={addLoading}>
                   {addLoading ? <span className="spinner spinner-sm" /> : <Plus size={15} />}
                   Add Campus
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEdit && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 520 }}>
+            <div className="modal-header">
+              <span className="modal-title">Edit Campus</span>
+              <button className="modal-close" onClick={() => setShowEdit(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleEdit}>
+              <div className="modal-body" style={{ padding: 24 }}>
+                {editError && <div className="page-error" style={{ marginBottom: 16 }}>{editError}</div>}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginBottom: 16 }}>
+                  <div className="form-group">
+                    <label className="form-label">
+                      Campus Name <span style={{ color: 'var(--color-danger)' }}>*</span>
+                    </label>
+                    <input
+                      className="form-input"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      placeholder="e.g. SGS Bharatpur"
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Campus Code</label>
+                    <input
+                      className="form-input"
+                      value={editForm.code}
+                      onChange={(e) => setEditForm({ ...editForm, code: e.target.value })}
+                      placeholder="e.g. SGS"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 20 }}>
+                  <label className="form-label">Location / Address</label>
+                  <input
+                    className="form-input"
+                    value={editForm.location}
+                    onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                    placeholder="City / Address"
+                  />
+                </div>
+
+                <div
+                  style={{
+                    borderTop: '1px solid var(--color-border)',
+                    paddingTop: 16,
+                    marginTop: 16,
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 'var(--font-size-xs)',
+                      fontWeight: 600,
+                      color: 'var(--color-text-muted)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      marginBottom: 12,
+                    }}
+                  >
+                    Center Head Account
+                  </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
+                    <div className="form-group">
+                      <label className="form-label">Center Head Name</label>
+                      <input
+                        className="form-input"
+                        value={editForm.centerHeadName}
+                        onChange={(e) => setEditForm({ ...editForm, centerHeadName: e.target.value })}
+                        placeholder="Center head full name"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Center Head Email</label>
+                      <input
+                        className="form-input"
+                        type="email"
+                        value={editForm.centerHeadEmail}
+                        onChange={(e) => setEditForm({ ...editForm, centerHeadEmail: e.target.value })}
+                        placeholder="email@example.com"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer" style={{ padding: '16px 24px' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setShowEdit(false)}
+                  disabled={editLoading}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={editLoading}>
+                  {editLoading ? <span className="spinner spinner-sm" /> : <Edit2 size={15} />}
+                  Save Changes
                 </button>
               </div>
             </form>

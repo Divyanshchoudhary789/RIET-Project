@@ -47,11 +47,11 @@ const PRIORITY_LEVELS = {
 };
 
 const CAMPUSES = [
-  { name: 'SGS Bharatpur', code: 'SGS' },
-  { name: 'SJS Gandhipath', code: 'SJS-G' },
-  { name: 'SHS Dhawas', code: 'SHS' },
-  { name: 'RIET', code: 'RIET' },
-  { name: 'SJS Hawasadak', code: 'SJS-H' },
+  { name: 'SGS Bharatpur', code: 'SGS', location: 'Bharatpur, Rajasthan' },
+  { name: 'SJS Gandhipath', code: 'SJS-G', location: 'Gandhipath, Jaipur, Rajasthan' },
+  { name: 'SHS Dhawas', code: 'SHS', location: 'Dhawas, Jaipur, Rajasthan' },
+  { name: 'RIET', code: 'RIET', location: 'Bhankrota, Ajmer Road, Jaipur, Rajasthan' },
+  { name: 'SJS Hawasadak', code: 'SJS-H', location: 'Hawasadak, Jaipur, Rajasthan' },
 ];
 
 const DEPARTMENTS = [

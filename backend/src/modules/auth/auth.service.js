@@ -56,6 +56,11 @@ const provisionUserAccount = async ({ name, email, role, scopeRef, scopeModel, c
     createdBy,
   });
 
+  if (role === 'center_head' && scopeRef) {
+    const Campus = require('../campuses/campus.model');
+    await Campus.findByIdAndUpdate(scopeRef, { centerHeadRef: user._id }).catch(() => {});
+  }
+
   const emailContent = welcomeEmail(name, email, tempPassword, ROLE_LABELS[role] || role);
   await sendEmail(email, emailContent.subject, emailContent.html);
 
