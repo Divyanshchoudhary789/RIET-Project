@@ -3,13 +3,16 @@ const { sendSuccess, sendError } = require('../../utils/response');
 
 const REFRESH_COOKIE_NAME = 'riet_refresh_token';
 
-const getCookieOptions = () => ({
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  path: '/',
-});
+const getCookieOptions = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? (process.env.SAME_SITE_COOKIE || 'none') : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: '/',
+  };
+};
 
 const login = async (req, res, next) => {
   try {

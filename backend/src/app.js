@@ -73,13 +73,14 @@ if (RATE_LIMIT.ENABLED) {
   );
 }
 
-// Stricter rate limiter on auth routes (disabled when RATE_LIMIT_ENABLED=false)
+// Stricter rate limiter on auth routes (login/forgot password) — skips background refresh & getMe
 const authLimiter = RATE_LIMIT.ENABLED
   ? rateLimit({
       windowMs: RATE_LIMIT.AUTH_WINDOW_MS,
       max: RATE_LIMIT.AUTH_MAX_REQUESTS,
       standardHeaders: true,
       legacyHeaders: false,
+      skip: (req) => req.path === '/refresh-token' || req.path === '/me',
       message: { success: false, message: 'Too many authentication attempts. Please wait 15 minutes.' },
     })
   : (req, res, next) => next();
