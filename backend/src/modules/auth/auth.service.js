@@ -161,9 +161,9 @@ const rotateRefreshToken = async (incomingRefreshToken) => {
   const newRefreshToken = generateRefreshToken(user._id);
 
   // Replace old token with new one
-  user.refreshTokens = user.refreshTokens.filter((t) => t !== incomingRefreshToken);
-  user.refreshTokens.push(newRefreshToken);
-  await user.save();
+  const updatedTokens = user.refreshTokens.filter((t) => t !== incomingRefreshToken);
+  updatedTokens.push(newRefreshToken);
+  await User.findByIdAndUpdate(user._id, { $set: { refreshTokens: updatedTokens } });
 
   return { accessToken, refreshToken: newRefreshToken };
 };
