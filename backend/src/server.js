@@ -1,7 +1,19 @@
 const http = require('http');
 const dotenv = require('dotenv');
+const path = require('path');
+const fs = require('fs');
 
-dotenv.config();
+// Ensure .env is loaded whether process.cwd() is root or src directory
+const envPathInSrc = path.join(__dirname, '.env');
+const envPathInRoot = path.join(__dirname, '../.env');
+
+if (fs.existsSync(envPathInSrc)) {
+  dotenv.config({ path: envPathInSrc });
+} else if (fs.existsSync(envPathInRoot)) {
+  dotenv.config({ path: envPathInRoot });
+} else {
+  dotenv.config();
+}
 
 const validateEnv = () => {
   const required = ['MONGO_URI', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET'];
@@ -18,10 +30,12 @@ const startServer = async () => {
     const connectDB = require('./config/db');
     const { configureCloudinary } = require('./config/cloudinary');
     const { initializeSocket } = require('./config/socket');
+    const { verifyTransporter } = require('./utils/email/emailService');
     const app = require('./app');
 
     await connectDB();
     configureCloudinary();
+    verifyTransporter().catch(() => {});
 
     const httpServer = http.createServer(app);
     initializeSocket(httpServer);

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { getErrorMessage } from '../utils/helpers';
 import '../styles/login.css';
 
-/* ── OTP input that auto-focuses next cell ── */
+/* ── OTP input that auto-focuses next cell & supports copy-paste ── */
 const OtpInput = ({ length = 6, value, onChange }) => {
   const inputs = useRef([]);
   const vals = value.split('');
@@ -26,8 +26,18 @@ const OtpInput = ({ length = 6, value, onChange }) => {
     }
   };
 
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, length);
+    if (pastedData) {
+      onChange(pastedData);
+      const targetIndex = Math.min(pastedData.length, length - 1);
+      inputs.current[targetIndex]?.focus();
+    }
+  };
+
   return (
-    <div className="auth-otp-inputs">
+    <div className="auth-otp-inputs" onPaste={handlePaste}>
       {Array.from({ length }).map((_, i) => (
         <input
           key={i}
@@ -107,10 +117,10 @@ const Login = () => {
   const handleForgotEmail = async (e) => {
     e.preventDefault();
     if (!fpEmail.trim()) { setError('Email is required.'); return; }
-    setError(''); setSubmitting(true);
+    setError(''); setSuccess(''); setSubmitting(true);
     try {
       await forgotPassword(fpEmail);
-      setSuccess('If that email exists, an OTP has been sent.');
+      setSuccess('A 6-digit OTP has been sent to your email address.');
       setStep('forgot-otp');
       startResendTimer();
     } catch (err) {
@@ -124,11 +134,16 @@ const Login = () => {
     e.preventDefault();
     if (otp.length !== 6) { setError('Enter the 6-digit OTP.'); return; }
     if (!newPw || newPw.length < 8) { setError('New password must be at least 8 characters.'); return; }
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@#$!%^&*])/;
+    if (!passwordRegex.test(newPw)) {
+      setError('Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character (@#$!%^&*).');
+      return;
+    }
     if (newPw !== confirmPw) { setError('Passwords do not match.'); return; }
-    setError(''); setSubmitting(true);
+    setError(''); setSuccess(''); setSubmitting(true);
     try {
       await resetPassword(fpEmail, otp, newPw, confirmPw);
-      setSuccess('Password reset successfully. Please log in.');
+      setSuccess('Password reset successfully. Please sign in with your new password.');
       setStep('login');
       setOtp(''); setNewPw(''); setConfirmPw('');
     } catch (err) {

@@ -221,11 +221,11 @@ const changePassword = async (userId, currentPassword, newPassword) => {
  * Initiates the forgot-password flow by generating and emailing a 6-digit OTP.
  */
 const initiateForgotPassword = async (email) => {
-  // Explicitly select passwordResetToken and passwordResetExpiry since they have select: false
-  const user = await User.findOne({ email: email.toLowerCase().trim() })
-    .select('+passwordResetToken +passwordResetExpiry');
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = await User.findOne({ email: normalizedEmail })
+    .select('+passwordResetToken +passwordResetExpiry +passwordResetAttempts');
 
-  // Always return success — prevents user enumeration
+  // Always return cleanly if user doesn't exist or is deactivated to prevent enumeration
   if (!user || !user.isActive) return;
 
   const otp = String(crypto.randomInt(100000, 999999));
@@ -233,20 +233,35 @@ const initiateForgotPassword = async (email) => {
 
   user.passwordResetToken = otpHash;
   user.passwordResetExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+  user.passwordResetAttempts = 0;
   await user.save();
 
   const emailContent = passwordResetEmail(user.name, otp);
-  await sendEmail(email, emailContent.subject, emailContent.html);
+
+  try {
+    await sendEmail(email, emailContent.subject, emailContent.html);
+  } catch (err) {
+    // Unset reset token so we don't leave an unreceived token in the DB
+    user.passwordResetToken = null;
+    user.passwordResetExpiry = null;
+    user.passwordResetAttempts = 0;
+    await user.save().catch(() => {});
+
+    const error = new Error(`Failed to send password reset email: ${err.message}. Please verify email settings.`);
+    error.statusCode = 500;
+    throw error;
+  }
 };
 
 /**
  * Resets the password using the OTP from email.
  */
 const resetPasswordWithOtp = async (email, otp, newPassword) => {
+  const normalizedEmail = email.toLowerCase().trim();
   const user = await User.findOne({
-    email: email.toLowerCase().trim(),
+    email: normalizedEmail,
     passwordResetExpiry: { $gt: new Date() },
-  }).select('+passwordResetToken +passwordResetExpiry');
+  }).select('+passwordResetToken +passwordResetExpiry +passwordResetAttempts');
 
   if (!user || !user.passwordResetToken) {
     const error = new Error('OTP is invalid or has expired.');
@@ -254,21 +269,43 @@ const resetPasswordWithOtp = async (email, otp, newPassword) => {
     throw error;
   }
 
+  if ((user.passwordResetAttempts || 0) >= 5) {
+    user.passwordResetToken = null;
+    user.passwordResetExpiry = null;
+    user.passwordResetAttempts = 0;
+    await user.save();
+    const error = new Error('Too many invalid OTP attempts. Please request a new OTP.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const otpMatches = await bcrypt.compare(otp, user.passwordResetToken);
   if (!otpMatches) {
-    const error = new Error('OTP is invalid or has expired.');
+    user.passwordResetAttempts = (user.passwordResetAttempts || 0) + 1;
+    await user.save();
+
+    const attemptsLeft = 5 - user.passwordResetAttempts;
+    const error = new Error(
+      attemptsLeft > 0
+        ? `OTP is invalid. You have ${attemptsLeft} attempt(s) remaining.`
+        : 'Too many invalid OTP attempts. Please request a new OTP.'
+    );
     error.statusCode = 400;
     throw error;
   }
 
   const newHash = await hashPassword(newPassword);
 
+  // Update password, clear reset token, and unlock account if previously locked
   await User.findByIdAndUpdate(user._id, {
     $set: {
       passwordHash: newHash,
       passwordResetToken: null,
       passwordResetExpiry: null,
+      passwordResetAttempts: 0,
       mustChangePassword: false,
+      loginAttempts: 0,
+      lockedUntil: null,
       refreshTokens: [],
     },
   });
