@@ -14,7 +14,7 @@ const listUsers = async (req, res, next) => {
 
 const getUserById = async (req, res, next) => {
   try {
-    const user = await userService.getUserById(req.params.id);
+    const user = await userService.getUserById(req.params.id, req.user);
     return sendSuccess(res, 200, 'User retrieved.', user);
   } catch (err) {
     next(err);
@@ -76,7 +76,7 @@ const createUser = async (req, res, next) => {
 
 const updateUser = async (req, res, next) => {
   try {
-    const user = await userService.updateUser(req.params.id, req.body);
+    const user = await userService.updateUser(req.params.id, req.body, req.user);
     return sendSuccess(res, 200, 'User updated.', user);
   } catch (err) {
     next(err);

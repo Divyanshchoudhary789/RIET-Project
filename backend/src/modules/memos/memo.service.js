@@ -8,6 +8,7 @@ const { buildTimelineEntry } = require('../../utils/timeline');
 const { createNotification, notifyMany, emitDashboardRefresh } = require('../notifications/notification.service');
 const { DOCUMENT_STATUS, TIMELINE_ACTIONS, ROLES } = require('../../config/constants');
 const { getPaginationParams, buildPaginationMeta } = require('../../utils/pagination');
+const { applyAtomicTransition, throwTransitionConflict } = require('../../utils/atomicTransition');
 
 const listMemos = async (user, query) => {
   const { page, limit, skip } = getPaginationParams(query);
@@ -158,27 +159,38 @@ const resubmitMemo = async (memoId, data, director) => {
 };
 
 const decideMemo = async (memoId, action, note, chairperson) => {
-  const memo = await Memo.findById(memoId)
-    .populate('createdBy', 'name email')
-    .populate({ path: 'notesheetRef', populate: { path: 'createdBy', select: 'name email _id' } });
+  const isApprove = action === 'approve';
+  const memo = await applyAtomicTransition(
+    Memo,
+    memoId,
+    [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.REVISED],
+    {
+      $set: {
+        status: isApprove ? DOCUMENT_STATUS.APPROVED : DOCUMENT_STATUS.REJECTED,
+        decisionNote: isApprove ? (note || '') : note,
+        decidedBy: chairperson._id,
+        decidedAt: new Date(),
+      },
+      $push: {
+        timeline: buildTimelineEntry(chairperson, isApprove ? TIMELINE_ACTIONS.APPROVED : TIMELINE_ACTIONS.REJECTED, note || ''),
+      },
+    },
+    [
+      { path: 'createdBy', select: 'name email' },
+      { path: 'notesheetRef', populate: { path: 'createdBy', select: 'name email _id' } },
+    ]
+  );
+
   if (!memo) {
-    const error = new Error('Memo not found.');
-    error.statusCode = 404;
-    throw error;
-  }
-  if (memo.status !== DOCUMENT_STATUS.SUBMITTED && memo.status !== DOCUMENT_STATUS.REVISED) {
-    const error = new Error(`Cannot review a memo with status: ${memo.status}`);
-    error.statusCode = 400;
-    throw error;
+    await throwTransitionConflict(
+      Memo,
+      memoId,
+      'Memo not found.',
+      'This memo is no longer pending review — it may have already been processed.'
+    );
   }
 
   if (action === 'approve') {
-    memo.status = DOCUMENT_STATUS.APPROVED;
-    memo.decisionNote = note || '';
-    memo.decidedBy = chairperson._id;
-    memo.decidedAt = new Date();
-    memo.timeline.push(buildTimelineEntry(chairperson, TIMELINE_ACTIONS.APPROVED, note || ''));
-
     // Trace back and close all linked requirements
     try {
       const notesheet = await Notesheet.findById(memo.notesheetRef).lean();
@@ -187,10 +199,13 @@ const decideMemo = async (memoId, action, note, chairperson) => {
         if (assessment?.workProposalRef) {
           const workProposal = await WorkProposal.findById(assessment.workProposalRef).lean();
           if (workProposal?.requirementRefs?.length) {
+            // Not CLOSED yet — the requirement is only truly fulfilled once goods are
+            // received (see purchaseOrder.service.js markGoodsReceived), otherwise Center
+            // Heads would see "Closed" before a PO even exists.
             await Requirement.updateMany(
               { _id: { $in: workProposal.requirementRefs } },
               {
-                $set: { status: DOCUMENT_STATUS.CLOSED },
+                $set: { status: DOCUMENT_STATUS.APPROVED },
                 $push: { timeline: buildTimelineEntry(chairperson, TIMELINE_ACTIONS.APPROVED, 'Memo approved by Chairperson') },
               }
             );
@@ -231,12 +246,6 @@ const decideMemo = async (memoId, action, note, chairperson) => {
       { action: 'approved', id: memo._id }
     );
   } else {
-    memo.status = DOCUMENT_STATUS.REJECTED;
-    memo.decisionNote = note;
-    memo.decidedBy = chairperson._id;
-    memo.decidedAt = new Date();
-    memo.timeline.push(buildTimelineEntry(chairperson, TIMELINE_ACTIONS.REJECTED, note));
-
     const recipientIds = new Set();
     const recipients = [];
     if (memo.createdBy?._id) {
@@ -269,7 +278,6 @@ const decideMemo = async (memoId, action, note, chairperson) => {
     );
   }
 
-  await memo.save();
   return memo;
 };
 

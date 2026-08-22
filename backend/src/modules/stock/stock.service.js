@@ -45,7 +45,7 @@ const listStockItems = async (user, query) => {
   return { items, meta: buildPaginationMeta(page, limit, total) };
 };
 
-const getStockItemById = async (itemId) => {
+const getStockItemById = async (itemId, user) => {
   const item = await StockItem.findById(itemId)
     .populate('ownerRef', 'name code')
     .populate('updatedBy', 'name email');
@@ -53,6 +53,18 @@ const getStockItemById = async (itemId) => {
   if (!item) {
     const error = new Error('Stock item not found.');
     error.statusCode = 404;
+    throw error;
+  }
+
+  const { role, scopeRef } = user;
+  if (role === ROLES.CENTER_HEAD && (item.ownerType !== 'campus' || item.ownerRef._id.toString() !== scopeRef.toString())) {
+    const error = new Error('You can only access stock items for your own campus.');
+    error.statusCode = 403;
+    throw error;
+  }
+  if (role === ROLES.DEPARTMENT_ADMIN && (item.ownerType !== 'department' || item.ownerRef._id.toString() !== scopeRef.toString())) {
+    const error = new Error('You can only access stock items for your own department.');
+    error.statusCode = 403;
     throw error;
   }
 

@@ -40,6 +40,12 @@ const requirementSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    title: {
+      type: String,
+      required: [true, 'Title is required'],
+      trim: true,
+      maxlength: [200, 'Title must not exceed 200 characters'],
+    },
     items: {
       type: [requirementItemSchema],
       validate: {

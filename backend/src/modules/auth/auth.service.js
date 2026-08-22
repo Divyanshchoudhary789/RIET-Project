@@ -76,6 +76,9 @@ const loginUser = async (email, password) => {
   );
 
   if (!user) {
+    // Run a dummy bcrypt compare so the response time matches the "wrong password" path,
+    // and return the same generic message to avoid leaking whether the email is registered.
+    await comparePasswords(password, '$2a$12$CwTycUXWue0Thq9StjUM0uJ8i8b0eG6d3q0Qw3v5Q0aWq0aWq0aWq');
     const error = new Error('Invalid email or password.');
     error.statusCode = 401;
     throw error;
@@ -111,7 +114,7 @@ const loginUser = async (email, password) => {
     const error = new Error(
       isNowLocked
         ? 'Too many failed attempts. Your account has been temporarily locked for 30 minutes.'
-        : `Invalid email or password. ${MAX_LOGIN_ATTEMPTS - user.loginAttempts} attempt(s) remaining before lockout.`
+        : 'Invalid email or password.'
     );
     error.statusCode = 401;
     throw error;
@@ -146,6 +149,13 @@ const rotateRefreshToken = async (incomingRefreshToken) => {
   }
 
   const user = await User.findById(decoded.id).select('+refreshTokens');
+
+  if (user && !user.isActive) {
+    await User.findByIdAndUpdate(user._id, { $set: { refreshTokens: [] } });
+    const error = new Error('Your account has been deactivated. Contact your administrator.');
+    error.statusCode = 403;
+    throw error;
+  }
 
   if (!user || !user.refreshTokens.includes(incomingRefreshToken)) {
     // Possible token theft — invalidate all sessions atomically
@@ -228,7 +238,7 @@ const initiateForgotPassword = async (email) => {
   // Always return cleanly if user doesn't exist or is deactivated to prevent enumeration
   if (!user || !user.isActive) return;
 
-  const otp = String(crypto.randomInt(100000, 999999));
+  const otp = String(crypto.randomInt(100000, 1000000));
   const otpHash = await bcrypt.hash(otp, 10);
 
   user.passwordResetToken = otpHash;

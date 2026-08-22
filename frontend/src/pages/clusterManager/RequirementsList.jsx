@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Search, Eye, XCircle, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Eye, XCircle, X, CheckSquare } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass } from '../../utils/helpers';
 import DocumentDetail from '../../components/DocumentDetail';
@@ -7,6 +8,7 @@ import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
 const RequirementsList = () => {
+  const navigate = useNavigate();
   const [items, setItems]       = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
@@ -104,6 +106,7 @@ const RequirementsList = () => {
             <thead>
               <tr>
                 <th>Reference</th>
+                <th>Title</th>
                 <th>Campus</th>
                 <th>Priority</th>
                 <th>Status</th>
@@ -113,9 +116,9 @@ const RequirementsList = () => {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={6}>
+                <tr><td colSpan={7}>
                   <div className="empty-state" style={{ padding: 48 }}>
                     <h3>No requirements found</h3>
                   </div>
@@ -123,6 +126,9 @@ const RequirementsList = () => {
               ) : items.map((req) => (
                 <tr key={req._id}>
                   <td style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>{req.referenceNumber || req._id?.slice(-8)}</td>
+                  <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={req.title}>
+                    {req.title || '—'}
+                  </td>
                   <td>
                     {req.campusRef?.name
                       ? <span style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>{req.campusRef.name}</span>
@@ -137,9 +143,17 @@ const RequirementsList = () => {
                         <Eye size={13} /> View
                       </button>
                       {(req.status === 'submitted' || req.status === 'revised') && (
-                        <button className="action-btn action-reject" onClick={() => openReject(req)}>
-                          <XCircle size={13} /> Reject
-                        </button>
+                        <>
+                          <button
+                            className="action-btn action-forward"
+                            onClick={() => navigate('/cluster-manager/proposals/new', { state: { requirementIds: [req._id] } })}
+                          >
+                            <CheckSquare size={13} /> Propose
+                          </button>
+                          <button className="action-btn action-reject" onClick={() => openReject(req)}>
+                            <XCircle size={13} /> Reject
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>

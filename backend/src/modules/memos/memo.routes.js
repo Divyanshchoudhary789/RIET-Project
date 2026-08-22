@@ -25,6 +25,12 @@ router.get(
   memoController.getMemoById
 );
 
+router.get(
+  '/:id/chain',
+  authorize(ROLES.DIRECTOR, ROLES.CHAIRPERSON, ROLES.ACCOUNTS),
+  memoController.getMemoChain
+);
+
 // Director creates a memo from a reviewed notesheet
 router.post(
   '/',

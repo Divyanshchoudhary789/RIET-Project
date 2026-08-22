@@ -1,4 +1,6 @@
 const memoService = require('./memo.service');
+const requirementService = require('../requirements/requirement.service');
+const { resolveRequirementIdFromMemo } = require('../../utils/chainResolver');
 const { sendSuccess } = require('../../utils/response');
 
 const listMemos = async (req, res, next) => {
@@ -48,4 +50,14 @@ const decideMemo = async (req, res, next) => {
   }
 };
 
-module.exports = { listMemos, getMemoById, createMemo, resubmitMemo, decideMemo };
+const getMemoChain = async (req, res, next) => {
+  try {
+    const requirementId = await resolveRequirementIdFromMemo(req.params.id);
+    const chain = requirementId ? await requirementService.getRequirementChain(requirementId, req.user) : null;
+    return sendSuccess(res, 200, 'Memo chain retrieved.', chain);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { listMemos, getMemoById, createMemo, resubmitMemo, decideMemo, getMemoChain };

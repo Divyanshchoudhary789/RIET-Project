@@ -25,6 +25,12 @@ router.get(
   notesheetController.getNotesheetById
 );
 
+router.get(
+  '/:id/chain',
+  authorize(ROLES.PO_OFFICE, ROLES.DIRECTOR, ROLES.CHAIRPERSON),
+  notesheetController.getNotesheetChain
+);
+
 // PO Office creates the first notesheet for a forwarded assessment
 router.post(
   '/',

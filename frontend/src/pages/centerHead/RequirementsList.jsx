@@ -176,7 +176,7 @@ const RequirementsList = () => {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Justification</th>
+                  <th>Title</th>
                   <th>Items</th>
                   <th>Priority</th>
                   <th>Status</th>
@@ -187,8 +187,8 @@ const RequirementsList = () => {
               <tbody>
                 {filtered.map((r) => (
                   <tr key={r._id}>
-                    <td style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {r.justification || '—'}
+                    <td style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.title || r.justification}>
+                      {r.title || r.justification || '—'}
                     </td>
                     <td>{r.items?.length ?? 0}</td>
                     <td><span className={`badge ${getPriorityClass(r.priority)}`}>{r.priority}</span></td>
@@ -230,7 +230,7 @@ const RequirementsList = () => {
             {/* Header */}
             <div className="drawer-header">
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span className="drawer-title">Requirement Details</span>
+                <span className="drawer-title">{selected.title || 'Requirement Details'}</span>
                 <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
                   Ref: {selected.referenceNumber || selected._id}
                 </span>
@@ -262,6 +262,16 @@ const RequirementsList = () => {
                   <span className={`badge ${getPriorityClass(selected.priority)}`}>{selected.priority}</span>
                 )}
               </div>
+
+              {/* Title */}
+              {selected.title && (
+                <div style={{ marginBottom: 16 }}>
+                  <div className="drawer-section-title">Title</div>
+                  <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-primary)', fontWeight: 600, margin: 0 }}>
+                    {selected.title}
+                  </p>
+                </div>
+              )}
 
               {/* Justification */}
               {selected.justification && (

@@ -30,7 +30,7 @@ const createDepartment = async (req, res, next) => {
 
 const updateDepartment = async (req, res, next) => {
   try {
-    const department = await departmentService.updateDepartment(req.params.id, req.body);
+    const department = await departmentService.updateDepartment(req.params.id, { ...req.body, updatedBy: req.user._id });
     return sendSuccess(res, 200, 'Department updated.', department);
   } catch (err) {
     next(err);

@@ -21,17 +21,38 @@ import {
 } from 'lucide-react';
 import api from '../utils/api';
 import Timeline from './Timeline';
+import ApprovalJourney from './ApprovalJourney';
 import { formatDate, formatCurrency, getStatusClass, getPriorityClass } from '../utils/helpers';
+import useModalA11y from '../hooks/useModalA11y';
+
+// Maps a docType label to the endpoint that returns the FULL approval journey
+// (Requirement → Work Proposal → Assessment → Notesheet → Memo → Purchase Order)
+// for that document, so every role sees the complete picture ahead of/behind
+// their own step — not just the current document's own local timeline.
+const chainEndpointFor = (docType, docId) => {
+  const t = (docType || '').toLowerCase();
+  if (t.includes('requirement')) return `/api/requirements/${docId}/chain`;
+  if (t.includes('propos')) return `/api/work-proposals/${docId}/chain`;
+  if (t.includes('assessment')) return `/api/assessments/${docId}/chain`;
+  if (t.includes('notesheet')) return `/api/notesheets/${docId}/chain`;
+  if (t.includes('memo')) return `/api/memos/${docId}/chain`;
+  if (t.includes('purchase') || t.includes('po')) return `/api/purchase-orders/${docId}/chain`;
+  return null;
+};
 
 const DocumentDrawer = ({ doc, docType = 'Document', onClose, footer }) => {
   const [fullDoc, setFullDoc] = useState(doc);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState('');
+  const [chain, setChain] = useState(null);
+
+  useModalA11y(onClose);
 
   // Auto-fetch deep populated memo details if viewing a memo
   useEffect(() => {
     setFullDoc(doc);
     setFetchError('');
+    setChain(null);
 
     const isMemo =
       docType.toLowerCase().includes('memo') ||
@@ -55,6 +76,15 @@ const DocumentDrawer = ({ doc, docType = 'Document', onClose, footer }) => {
         .finally(() => {
           setLoading(false);
         });
+    }
+
+    // Fetch the full approval-chain journey for the audit timeline section.
+    // Falls back to the document's own local timeline if this fails.
+    const endpoint = doc?._id ? chainEndpointFor(docType, doc._id) : null;
+    if (endpoint) {
+      api.get(endpoint)
+        .then((res) => setChain(res.data?.data || null))
+        .catch(() => setChain(null));
     }
   }, [doc, docType]);
 
@@ -275,7 +305,7 @@ const DocumentDrawer = ({ doc, docType = 'Document', onClose, footer }) => {
                   </thead>
                   <tbody>
                     {quotations.map((q, i) => {
-                      const isRecommended = recommendedVendor && (
+                      const isRecommended = recommendedVendor && q.vendorName && (
                         q.vendorName.trim().toLowerCase() === recommendedVendor.trim().toLowerCase() ||
                         recommendedVendor.trim().toLowerCase().includes(q.vendorName.trim().toLowerCase())
                       );
@@ -414,13 +444,25 @@ const DocumentDrawer = ({ doc, docType = 'Document', onClose, footer }) => {
             </div>
           )}
 
-          {/* Audit Timeline */}
+          {/* Audit Timeline — this document's own history (submitted/rejected/revised,
+              with notes), so the viewer can see exactly what happened to their own work */}
           {activeDoc.timeline && activeDoc.timeline.length > 0 && (
-            <div>
+            <div style={{ marginBottom: chain ? 24 : 0 }}>
               <div className="drawer-section-title" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-primary)', fontWeight: 600, marginBottom: 12 }}>
                 <Clock size={16} color="var(--color-accent)" /> Audit Timeline
               </div>
               <Timeline entries={activeDoc.timeline} />
+            </div>
+          )}
+
+          {/* Approval Journey — the complete end-to-end chain across every stage,
+              so the viewer can see the full picture beyond just their own step */}
+          {chain && (
+            <div>
+              <div className="drawer-section-title" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-primary)', fontWeight: 600, marginBottom: 12 }}>
+                <Clock size={16} color="var(--color-accent)" /> Approval Journey
+              </div>
+              <ApprovalJourney chain={chain} requirementTimeline={chain.requirement?.timeline || []} />
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Briefcase, Users, Package, CheckCircle2, ArrowRight, Eye } from 'lucide-react';
+import { Briefcase, Users, Package, CheckCircle2, ArrowRight, Eye, Building2, BarChart2 } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate } from '../../utils/helpers';
 import useSocketEvent from '../../hooks/useSocketEvent';
@@ -10,7 +10,7 @@ import '../../styles/pages.css';
 
 const ChairpersonDashboard = () => {
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ pendingMemos: 0, approvedMemos: 0, rejectedMemos: 0, totalUsers: 0, totalStockItems: 0 });
+  const [stats, setStats] = useState({ pendingMemos: 0, approvedMemos: 0, rejectedMemos: 0, totalUsers: 0, totalStockItems: 0, totalCampuses: 0, totalDepartments: 0 });
   const [pendingMemosList, setPendingMemosList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,10 +22,12 @@ const ChairpersonDashboard = () => {
     setLoading(true);
     setError('');
     try {
-      const [memosRes, usersRes, stockRes] = await Promise.all([
+      const [memosRes, usersRes, stockRes, campusesRes, deptRes] = await Promise.all([
         api.get('/api/memos?limit=100'),
         api.get('/api/users?limit=1'),
         api.get('/api/stock?limit=1'),
+        api.get('/api/campuses?limit=1'),
+        api.get('/api/departments?limit=1'),
       ]);
       const memos = Array.isArray(memosRes.data.data) ? memosRes.data.data : memosRes.data.data?.memos || [];
       const pending  = memos.filter((m) => m.status === 'submitted' || m.status === 'under_review');
@@ -35,8 +37,10 @@ const ChairpersonDashboard = () => {
         pendingMemos: pending.length,
         approvedMemos: approved.length,
         rejectedMemos: rejected.length,
-        totalUsers: usersRes.data?.total || usersRes.data?.data?.length || 0,
-        totalStockItems: stockRes.data?.total || stockRes.data?.data?.length || 0,
+        totalUsers: usersRes.data?.meta?.total || usersRes.data?.total || 0,
+        totalStockItems: stockRes.data?.meta?.total || stockRes.data?.total || 0,
+        totalCampuses: campusesRes.data?.meta?.total || campusesRes.data?.total || 0,
+        totalDepartments: deptRes.data?.meta?.total || deptRes.data?.total || 0,
       });
       setPendingMemosList(pending);
     } catch (err) {
@@ -108,6 +112,14 @@ const ChairpersonDashboard = () => {
           <div className="stat-icon" style={{ background: 'rgba(124,58,237,0.15)', color: '#7c3aed' }}><Package size={22} /></div>
           <div className="stat-info"><span className="stat-label">Total Stock Items</span><span className="stat-value">{stats.totalStockItems}</span></div>
         </div>
+        <div className="stat-card" onClick={() => navigate('/chairperson/campuses')} style={{ cursor: 'pointer' }}>
+          <div className="stat-icon" style={{ background: 'rgba(37,99,235,0.15)', color: '#2563eb' }}><Building2 size={22} /></div>
+          <div className="stat-info"><span className="stat-label">Campuses</span><span className="stat-value">{stats.totalCampuses}</span></div>
+        </div>
+        <div className="stat-card" onClick={() => navigate('/chairperson/departments')} style={{ cursor: 'pointer' }}>
+          <div className="stat-icon" style={{ background: 'rgba(124,58,237,0.15)', color: '#7c3aed' }}><BarChart2 size={22} /></div>
+          <div className="stat-info"><span className="stat-label">Departments</span><span className="stat-value">{stats.totalDepartments}</span></div>
+        </div>
       </div>
 
       <div className="section-card">
@@ -144,8 +156,8 @@ const ChairpersonDashboard = () => {
                   <td>
                     <div className="actions-cell">
                       <button className="action-btn action-view" onClick={() => setSelectedMemo(m)}><Eye size={13} /> View</button>
-                      <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => handleApproveMemo(m._id)}>Approve</button>
-                      <button className="btn btn-danger"  style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setRejectingMemoId(m._id)}>Reject</button>
+                      <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: 12 }} disabled={actionLoading} onClick={() => handleApproveMemo(m._id)}>Approve</button>
+                      <button className="btn btn-danger"  style={{ padding: '4px 10px', fontSize: 12 }} disabled={actionLoading} onClick={() => setRejectingMemoId(m._id)}>Reject</button>
                     </div>
                   </td>
                 </tr>

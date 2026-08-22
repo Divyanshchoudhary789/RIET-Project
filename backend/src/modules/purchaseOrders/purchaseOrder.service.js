@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const PurchaseOrder = require('./purchaseOrder.model');
 const Memo = require('../memos/memo.model');
 const Requirement = require('../requirements/requirement.model');
@@ -79,23 +80,28 @@ const createPurchaseOrder = async (data, accountsUser) => {
     error.statusCode = 400;
     throw error;
   }
-  const existingPO = await PurchaseOrder.findOne({ memoRef: data.memoRef });
-  if (existingPO) {
-    const error = new Error('A Purchase Order already exists for this memo.');
-    error.statusCode = 409;
-    throw error;
-  }
-
   const poNumber = await generatePoNumber();
-  const order = await PurchaseOrder.create({
-    memoRef: data.memoRef,
-    poNumber,
-    createdBy: accountsUser._id,
-    vendorName: data.vendorName,
-    totalAmount: data.totalAmount,
-    status: 'issued',
-    timeline: [buildTimelineEntry(accountsUser, TIMELINE_ACTIONS.CREATED, 'Purchase Order issued')],
-  });
+  let order;
+  try {
+    // Relies on the unique index on memoRef to atomically prevent two concurrent
+    // requests from both creating a PO for the same memo.
+    order = await PurchaseOrder.create({
+      memoRef: data.memoRef,
+      poNumber,
+      createdBy: accountsUser._id,
+      vendorName: data.vendorName,
+      totalAmount: data.totalAmount,
+      status: 'issued',
+      timeline: [buildTimelineEntry(accountsUser, TIMELINE_ACTIONS.CREATED, 'Purchase Order issued')],
+    });
+  } catch (err) {
+    if (err.code === 11000 && err.keyPattern?.memoRef) {
+      const error = new Error('A Purchase Order already exists for this memo.');
+      error.statusCode = 409;
+      throw error;
+    }
+    throw err;
+  }
 
   memo.purchaseOrderRef = order._id;
   await memo.save();
@@ -146,60 +152,86 @@ const uploadPerformaInvoice = async (orderId, piAttachmentUrl, accountsUser) => 
   return order;
 };
 
-const markGoodsReceived = async (orderId, note, receivedByUser) => {
-  const order = await PurchaseOrder.findById(orderId)
-    .populate({
-      path: 'memoRef',
+const populateGoodsReceiptChain = {
+  path: 'memoRef',
+  populate: {
+    path: 'notesheetRef',
+    populate: {
+      path: 'assessmentRef',
       populate: {
-        path: 'notesheetRef',
-        populate: {
-          path: 'assessmentRef',
-          populate: {
-            path: 'workProposalRef',
-            populate: { path: 'requirementRefs', select: 'items campusRef', populate: { path: 'campusRef', select: '_id name code' } },
-          },
-        },
+        path: 'workProposalRef',
+        populate: { path: 'requirementRefs', select: 'items campusRef', populate: { path: 'campusRef', select: '_id name code' } },
       },
-    });
-  if (!order) {
-    const error = new Error('Purchase order not found.');
-    error.statusCode = 404;
-    throw error;
-  }
-  if (order.status === 'closed') {
-    const error = new Error('This purchase order has already been closed.');
-    error.statusCode = 400;
-    throw error;
-  }
+    },
+  },
+};
 
+/**
+ * Marks a PO as received and, atomically within a single DB transaction, closes every
+ * linked Requirement and increments campus stock. Wrapped in a transaction because a
+ * crash partway through the per-requirement loop would otherwise leave the PO closed
+ * with only some requirements/stock updated — a silent partial-fulfillment state.
+ */
+const markGoodsReceived = async (orderId, note, receivedByUser) => {
   const receivedNote = note || 'Goods received at destination';
-  order.status = 'closed';
-  order.receivedAt = new Date();
-  order.receivedBy = receivedByUser._id;
-  order.timeline.push(buildTimelineEntry(receivedByUser, TIMELINE_ACTIONS.RECEIVED, receivedNote));
-  await order.save();
+  const session = await mongoose.startSession();
+  let order;
 
-  const requirements = order.memoRef?.notesheetRef?.assessmentRef?.workProposalRef?.requirementRefs || [];
-  for (const req of requirements) {
-    await Requirement.findByIdAndUpdate(req._id, {
-      $set: { status: DOCUMENT_STATUS.CLOSED },
-      $push: { timeline: buildTimelineEntry(receivedByUser, TIMELINE_ACTIONS.RECEIVED, 'Goods received — requirement fulfilled') },
-    });
+  try {
+    await session.withTransaction(async () => {
+      order = await PurchaseOrder.findOneAndUpdate(
+        { _id: orderId, status: 'pi_uploaded' },
+        {
+          $set: { status: 'closed', receivedAt: new Date(), receivedBy: receivedByUser._id },
+          $push: { timeline: buildTimelineEntry(receivedByUser, TIMELINE_ACTIONS.RECEIVED, receivedNote) },
+        },
+        { new: true, session }
+      ).populate(populateGoodsReceiptChain);
 
-    if (req.campusRef?._id) {
-      for (const item of req.items || []) {
-        await StockItem.findOneAndUpdate(
-          { ownerType: 'campus', ownerRef: req.campusRef._id, itemName: item.name },
-          { $inc: { quantityAvailable: item.quantity }, $set: { updatedBy: receivedByUser._id } },
-          {
-            upsert: true, new: true,
-            setOnInsert: { ownerModel: 'Campus', category: 'Received', unit: item.unit || 'units', quantityReserved: 0, reorderThreshold: 0 },
-          }
-        );
+      if (!order) {
+        const existing = await PurchaseOrder.findById(orderId).session(session);
+        if (!existing) {
+          const error = new Error('Purchase order not found.');
+          error.statusCode = 404;
+          throw error;
+        }
+        if (existing.status === 'closed') {
+          const error = new Error('This purchase order has already been closed.');
+          error.statusCode = 400;
+          throw error;
+        }
+        const error = new Error('A Performa Invoice must be uploaded before goods can be marked as received.');
+        error.statusCode = 400;
+        throw error;
       }
-    }
+
+      const requirements = order.memoRef?.notesheetRef?.assessmentRef?.workProposalRef?.requirementRefs || [];
+      for (const req of requirements) {
+        await Requirement.findByIdAndUpdate(req._id, {
+          $set: { status: DOCUMENT_STATUS.CLOSED },
+          $push: { timeline: buildTimelineEntry(receivedByUser, TIMELINE_ACTIONS.CLOSED, 'Goods received — requirement fulfilled') },
+        }, { session });
+
+        if (req.campusRef?._id) {
+          for (const item of req.items || []) {
+            await StockItem.findOneAndUpdate(
+              { ownerType: 'campus', ownerRef: req.campusRef._id, itemName: item.name },
+              { $inc: { quantityAvailable: item.quantity }, $set: { updatedBy: receivedByUser._id } },
+              {
+                upsert: true, new: true, session,
+                setOnInsert: { ownerModel: 'Campus', category: 'Received', unit: item.unit || 'units', quantityReserved: 0, reorderThreshold: 0 },
+              }
+            );
+          }
+        }
+      }
+    });
+  } finally {
+    await session.endSession();
   }
 
+  // Notifications are best-effort and happen outside the transaction.
+  const requirements = order.memoRef?.notesheetRef?.assessmentRef?.workProposalRef?.requirementRefs || [];
   const campusIds = [...new Set(requirements.map((r) => r.campusRef?._id?.toString()).filter(Boolean))];
   for (const campusId of campusIds) {
     const centerHeads = await User.find({ role: ROLES.CENTER_HEAD, scopeRef: campusId, isActive: true });

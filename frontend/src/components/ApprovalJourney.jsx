@@ -9,6 +9,10 @@ import {
   PackageCheck,
   IndianRupee,
   Clock,
+  Hourglass,
+  XCircle,
+  CheckCircle2,
+  Paperclip,
 } from 'lucide-react';
 import { formatDate, formatCurrency, getStatusClass } from '../utils/helpers';
 
@@ -124,8 +128,8 @@ const RejectionNote = ({ by, note }) => (
     background: '#fef2f2', border: '1px solid #fecaca',
     borderRadius: 6, padding: '8px 12px', marginTop: 8,
   }}>
-    <div style={{ fontSize: 11, fontWeight: 600, color: '#dc2626', marginBottom: 2 }}>
-      ✗ Rejected{by ? ` by ${by}` : ''}
+    <div style={{ fontSize: 11, fontWeight: 600, color: '#dc2626', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+      <XCircle size={12} /> Rejected{by ? ` by ${by}` : ''}
     </div>
     {note && <div style={{ fontSize: 11, color: '#991b1b', fontStyle: 'italic' }}>"{note}"</div>}
   </div>
@@ -136,16 +140,18 @@ const ApprovalNote = ({ by, date }) => (
     background: '#f0fdf4', border: '1px solid #bbf7d0',
     borderRadius: 6, padding: '8px 12px', marginTop: 8,
     fontSize: 11, fontWeight: 600, color: '#16a34a',
+    display: 'flex', alignItems: 'center', gap: 4,
   }}>
-    ✓ Approved by {by}{date ? ` · ${formatDate(date)}` : ''}
+    <CheckCircle2 size={12} /> Approved by {by}{date ? ` · ${formatDate(date)}` : ''}
   </div>
 );
 
 const AwaitingNote = ({ text }) => (
   <div style={{
     fontSize: 11, color: '#0891b2', fontStyle: 'italic', marginTop: 6,
+    display: 'flex', alignItems: 'center', gap: 4,
   }}>
-    ⏳ {text}
+    <Hourglass size={11} /> {text}
   </div>
 );
 
@@ -427,12 +433,19 @@ const ApprovalJourney = ({ chain, requirementTimeline = [] }) => {
             </div>
           </div>
           {purchaseOrder.piAttachmentUrl && (
-            <div style={{
-              marginTop: 8, fontSize: 11,
-              color: '#16a34a', fontWeight: 500,
-            }}>
-              📎 Performa Invoice uploaded
-            </div>
+            <a
+              href={purchaseOrder.piAttachmentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                marginTop: 8, fontSize: 11,
+                color: '#16a34a', fontWeight: 600,
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                textDecoration: 'underline', cursor: 'pointer',
+              }}
+            >
+              <Paperclip size={12} /> View Performa Invoice
+            </a>
           )}
           {(purchaseOrder.status === 'issued' || purchaseOrder.status === 'pi_uploaded') && (
             <AwaitingNote text="Awaiting goods delivery & receipt confirmation…" />

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Search, Eye, XCircle, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Eye, XCircle, X, FileCheck } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass } from '../../utils/helpers';
 import DocumentDetail from '../../components/DocumentDetail';
@@ -7,10 +8,12 @@ import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
 const WorkProposalsList = () => {
+  const navigate = useNavigate();
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
   const [search, setSearch]   = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage]       = useState(1);
   const [total, setTotal]     = useState(0);
   const limit = 15;
@@ -27,6 +30,7 @@ const WorkProposalsList = () => {
     try {
       const p = new URLSearchParams({ page, limit });
       if (search) p.set('search', search);
+      if (statusFilter) p.set('status', statusFilter);
       const r = await api.get(`/api/work-proposals?${p}`);
       const d = r.data.data;
       setItems(Array.isArray(d) ? d : (d?.proposals || []));
@@ -36,7 +40,7 @@ const WorkProposalsList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, statusFilter]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
@@ -77,6 +81,13 @@ const WorkProposalsList = () => {
             <Search size={15} className="search-icon" />
             <input type="text" className="form-input" placeholder="Search proposals…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
           </div>
+          <select className="filter-select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
+            <option value="">All Statuses</option>
+            <option value="submitted">Submitted</option>
+            <option value="revised">Revised</option>
+            <option value="forwarded">Forwarded</option>
+            <option value="rejected">Rejected</option>
+          </select>
         </div>
 
         <div className="table-wrap">
@@ -109,9 +120,17 @@ const WorkProposalsList = () => {
                         <Eye size={13} /> View
                       </button>
                       {(p.status === 'submitted' || p.status === 'revised') && (
-                        <button className="action-btn action-reject" onClick={() => { setRejectTarget(p); setRejectNote(''); setRejectError(''); }}>
-                          <XCircle size={13} /> Reject
-                        </button>
+                        <>
+                          <button
+                            className="action-btn action-forward"
+                            onClick={() => navigate('/department-admin/assessments/new', { state: { workProposalId: p._id } })}
+                          >
+                            <FileCheck size={13} /> Create Assessment
+                          </button>
+                          <button className="action-btn action-reject" onClick={() => { setRejectTarget(p); setRejectNote(''); setRejectError(''); }}>
+                            <XCircle size={13} /> Reject
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>

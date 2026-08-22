@@ -21,6 +21,12 @@ router.get(
   workProposalController.getWorkProposalById
 );
 
+router.get(
+  '/:id/chain',
+  authorize(ROLES.CLUSTER_MANAGER, ROLES.DEPARTMENT_ADMIN, ROLES.DIRECTOR, ROLES.CHAIRPERSON),
+  workProposalController.getWorkProposalChain
+);
+
 // Cluster Manager creates a new work proposal from requirements
 router.post(
   '/',

@@ -25,7 +25,10 @@ const NewNotesheet = () => {
     const fetchForwardedAssessments = async () => {
       try {
         const r = await api.get('/api/assessments?status=forwarded&limit=100');
-        const list = Array.isArray(r.data.data) ? r.data.data : (r.data.data?.assessments || []);
+        const raw = Array.isArray(r.data.data) ? r.data.data : (r.data.data?.assessments || []);
+        // Assessment status stays "forwarded" even after a notesheet exists for it, so
+        // exclude ones that already have one to prevent picking a duplicate target.
+        const list = raw.filter((a) => !a.notesheetRef);
         setAssessments(list);
         // Only pre-select if nothing is already selected (avoid overwriting URL param)
         setAssessmentRef((prev) => (prev ? prev : list[0]?._id || ''));

@@ -13,6 +13,7 @@ const WorkProposalsList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
   const [search, setSearch]   = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage]       = useState(1);
   const [total, setTotal]     = useState(0);
   const limit = 15;
@@ -24,6 +25,7 @@ const WorkProposalsList = () => {
     try {
       const p = new URLSearchParams({ page, limit });
       if (search) p.set('search', search);
+      if (statusFilter) p.set('status', statusFilter);
       const r = await api.get(`/api/work-proposals?${p}`);
       const d = r.data.data;
       setItems(Array.isArray(d) ? d : (d?.proposals || []));
@@ -33,7 +35,7 @@ const WorkProposalsList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, statusFilter]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
@@ -63,6 +65,13 @@ const WorkProposalsList = () => {
             <Search size={15} className="search-icon" />
             <input type="text" className="form-input" placeholder="Search proposals…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
           </div>
+          <select className="filter-select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
+            <option value="">All Statuses</option>
+            <option value="submitted">Submitted</option>
+            <option value="revised">Revised</option>
+            <option value="forwarded">Forwarded</option>
+            <option value="rejected">Rejected</option>
+          </select>
         </div>
 
         <div className="table-wrap">

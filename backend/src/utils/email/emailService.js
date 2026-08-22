@@ -29,9 +29,6 @@ const getTransporter = () => {
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 10000,
-    tls: {
-      rejectUnauthorized: false,
-    },
   });
 
   return transporter;

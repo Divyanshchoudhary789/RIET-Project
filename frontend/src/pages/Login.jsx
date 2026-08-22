@@ -46,6 +46,8 @@ const OtpInput = ({ length = 6, value, onChange }) => {
           type="text"
           inputMode="numeric"
           maxLength={1}
+          aria-label={`OTP digit ${i + 1} of ${length}`}
+          autoComplete={i === 0 ? 'one-time-code' : 'off'}
           value={vals[i] || ''}
           onChange={() => {}}
           onKeyDown={(e) => handleKey(i, e)}

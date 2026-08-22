@@ -5,6 +5,7 @@ const { buildTimelineEntry } = require('../../utils/timeline');
 const { createNotification, notifyMany, emitDashboardRefresh } = require('../notifications/notification.service');
 const { DOCUMENT_STATUS, TIMELINE_ACTIONS, ROLES } = require('../../config/constants');
 const { getPaginationParams, buildPaginationMeta } = require('../../utils/pagination');
+const { applyAtomicTransition, throwTransitionConflict } = require('../../utils/atomicTransition');
 
 const listNotesheets = async (user, query) => {
   const { page, limit, skip } = getPaginationParams(query);
@@ -134,21 +135,25 @@ const resubmitNotesheet = async (notesheetId, data, poUser) => {
 };
 
 const rejectNotesheet = async (notesheetId, note, director) => {
-  const notesheet = await Notesheet.findById(notesheetId).populate('createdBy', 'name email');
-  if (!notesheet) {
-    const error = new Error('Notesheet not found.');
-    error.statusCode = 404;
-    throw error;
-  }
-  if (notesheet.status !== DOCUMENT_STATUS.SUBMITTED && notesheet.status !== DOCUMENT_STATUS.REVISED) {
-    const error = new Error(`Cannot reject a notesheet with status: ${notesheet.status}`);
-    error.statusCode = 400;
-    throw error;
-  }
+  const notesheet = await applyAtomicTransition(
+    Notesheet,
+    notesheetId,
+    [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.REVISED],
+    {
+      $set: { status: DOCUMENT_STATUS.REJECTED },
+      $push: { timeline: buildTimelineEntry(director, TIMELINE_ACTIONS.REJECTED, note) },
+    },
+    { path: 'createdBy', select: 'name email' }
+  );
 
-  notesheet.status = DOCUMENT_STATUS.REJECTED;
-  notesheet.timeline.push(buildTimelineEntry(director, TIMELINE_ACTIONS.REJECTED, note));
-  await notesheet.save();
+  if (!notesheet) {
+    await throwTransitionConflict(
+      Notesheet,
+      notesheetId,
+      'Notesheet not found.',
+      'This notesheet is no longer pending review — it may have already been processed.'
+    );
+  }
 
   await createNotification({
     userId: notesheet.createdBy._id,

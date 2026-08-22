@@ -1,4 +1,6 @@
 const assessmentService = require('./assessment.service');
+const requirementService = require('../requirements/requirement.service');
+const { resolveRequirementIdFromAssessment } = require('../../utils/chainResolver');
 const { sendSuccess } = require('../../utils/response');
 
 const listAssessments = async (req, res, next) => {
@@ -12,7 +14,7 @@ const listAssessments = async (req, res, next) => {
 
 const getAssessmentById = async (req, res, next) => {
   try {
-    const assessment = await assessmentService.getAssessmentById(req.params.id);
+    const assessment = await assessmentService.getAssessmentById(req.params.id, req.user);
     return sendSuccess(res, 200, 'Assessment retrieved.', assessment);
   } catch (err) {
     next(err);
@@ -55,6 +57,16 @@ const rejectAssessment = async (req, res, next) => {
   }
 };
 
+const getAssessmentChain = async (req, res, next) => {
+  try {
+    const requirementId = await resolveRequirementIdFromAssessment(req.params.id);
+    const chain = requirementId ? await requirementService.getRequirementChain(requirementId, req.user) : null;
+    return sendSuccess(res, 200, 'Assessment chain retrieved.', chain);
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   listAssessments,
   getAssessmentById,
@@ -62,4 +74,5 @@ module.exports = {
   resubmitAssessment,
   forwardAssessmentToPO,
   rejectAssessment,
+  getAssessmentChain,
 };

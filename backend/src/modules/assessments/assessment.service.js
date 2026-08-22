@@ -5,6 +5,7 @@ const { buildTimelineEntry } = require('../../utils/timeline');
 const { createNotification, notifyMany, emitDashboardRefresh } = require('../notifications/notification.service');
 const { DOCUMENT_STATUS, TIMELINE_ACTIONS, ROLES } = require('../../config/constants');
 const { getPaginationParams, buildPaginationMeta } = require('../../utils/pagination');
+const { applyAtomicTransition, throwTransitionConflict } = require('../../utils/atomicTransition');
 
 const buildFilter = (user, query) => {
   const filter = {};
@@ -38,7 +39,7 @@ const listAssessments = async (user, query) => {
   return { assessments, meta: buildPaginationMeta(page, limit, total) };
 };
 
-const getAssessmentById = async (assessmentId) => {
+const getAssessmentById = async (assessmentId, user) => {
   const assessment = await Assessment.findById(assessmentId)
     .populate({
       path: 'workProposalRef',
@@ -54,6 +55,11 @@ const getAssessmentById = async (assessmentId) => {
   if (!assessment) {
     const error = new Error('Assessment not found.');
     error.statusCode = 404;
+    throw error;
+  }
+  if (user.role === ROLES.DEPARTMENT_ADMIN && assessment.departmentRef._id.toString() !== user.scopeRef.toString()) {
+    const error = new Error('You can only access assessments from your own department.');
+    error.statusCode = 403;
     throw error;
   }
   return assessment;
@@ -160,21 +166,25 @@ const resubmitAssessment = async (assessmentId, data, departmentAdmin) => {
 };
 
 const forwardAssessmentToPO = async (assessmentId, director) => {
-  const assessment = await Assessment.findById(assessmentId).populate('createdBy', 'name email');
-  if (!assessment) {
-    const error = new Error('Assessment not found.');
-    error.statusCode = 404;
-    throw error;
-  }
-  if (assessment.status !== DOCUMENT_STATUS.SUBMITTED && assessment.status !== DOCUMENT_STATUS.REVISED) {
-    const error = new Error(`Cannot forward an assessment with status: ${assessment.status}`);
-    error.statusCode = 400;
-    throw error;
-  }
+  const assessment = await applyAtomicTransition(
+    Assessment,
+    assessmentId,
+    [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.REVISED],
+    {
+      $set: { status: DOCUMENT_STATUS.FORWARDED },
+      $push: { timeline: buildTimelineEntry(director, TIMELINE_ACTIONS.FORWARDED, 'Forwarded to PO Office') },
+    },
+    { path: 'createdBy', select: 'name email' }
+  );
 
-  assessment.status = DOCUMENT_STATUS.FORWARDED;
-  assessment.timeline.push(buildTimelineEntry(director, TIMELINE_ACTIONS.FORWARDED, 'Forwarded to PO Office'));
-  await assessment.save();
+  if (!assessment) {
+    await throwTransitionConflict(
+      Assessment,
+      assessmentId,
+      'Assessment not found.',
+      'This assessment is no longer pending review — it may have already been processed.'
+    );
+  }
 
   const poUsers = await User.find({ role: ROLES.PO_OFFICE, isActive: true });
   await notifyMany(poUsers, {
@@ -196,21 +206,25 @@ const forwardAssessmentToPO = async (assessmentId, director) => {
 };
 
 const rejectAssessment = async (assessmentId, note, director) => {
-  const assessment = await Assessment.findById(assessmentId).populate('createdBy', 'name email');
-  if (!assessment) {
-    const error = new Error('Assessment not found.');
-    error.statusCode = 404;
-    throw error;
-  }
-  if (assessment.status !== DOCUMENT_STATUS.SUBMITTED && assessment.status !== DOCUMENT_STATUS.REVISED) {
-    const error = new Error(`Cannot reject an assessment with status: ${assessment.status}`);
-    error.statusCode = 400;
-    throw error;
-  }
+  const assessment = await applyAtomicTransition(
+    Assessment,
+    assessmentId,
+    [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.REVISED],
+    {
+      $set: { status: DOCUMENT_STATUS.REJECTED },
+      $push: { timeline: buildTimelineEntry(director, TIMELINE_ACTIONS.REJECTED, note) },
+    },
+    { path: 'createdBy', select: 'name email' }
+  );
 
-  assessment.status = DOCUMENT_STATUS.REJECTED;
-  assessment.timeline.push(buildTimelineEntry(director, TIMELINE_ACTIONS.REJECTED, note));
-  await assessment.save();
+  if (!assessment) {
+    await throwTransitionConflict(
+      Assessment,
+      assessmentId,
+      'Assessment not found.',
+      'This assessment is no longer pending review — it may have already been processed.'
+    );
+  }
 
   await createNotification({
     userId: assessment.createdBy._id,

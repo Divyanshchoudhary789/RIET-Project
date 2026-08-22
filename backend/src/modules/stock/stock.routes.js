@@ -9,8 +9,18 @@ const { ROLES } = require('../../config/constants');
 
 router.use(authenticate, requirePasswordChange);
 
-router.get('/', stockController.listStockItems);
-router.get('/:id', stockController.getStockItemById);
+// Stock is visible to every role except PO Office (not part of the approval chain for stock)
+const STOCK_VIEW_ROLES = [
+  ROLES.CENTER_HEAD,
+  ROLES.CLUSTER_MANAGER,
+  ROLES.DEPARTMENT_ADMIN,
+  ROLES.DIRECTOR,
+  ROLES.CHAIRPERSON,
+  ROLES.ACCOUNTS,
+];
+
+router.get('/', authorize(...STOCK_VIEW_ROLES), stockController.listStockItems);
+router.get('/:id', authorize(...STOCK_VIEW_ROLES), stockController.getStockItemById);
 
 // Only Director, Chairperson, and Accounts can manually create/update stock records
 // (stock is normally updated via goods receipt flow)

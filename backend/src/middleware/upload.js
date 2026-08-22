@@ -21,16 +21,29 @@ const memoryStorage = multer.memoryStorage();
  * @param {Buffer} buffer - File buffer from multer memoryStorage
  * @param {string} folder - Cloudinary folder path
  * @param {string} originalname - Original filename for public_id generation
+ * @param {string} [mimetype] - The file's MIME type, used to pick the right resource_type
  * @returns {Promise<string>} Secure URL of the uploaded file
  */
-const uploadBufferToCloudinary = (buffer, folder, originalname) => {
+const uploadBufferToCloudinary = (buffer, folder, originalname, mimetype = '') => {
   return new Promise((resolve, reject) => {
+    // Cloudinary's default account security setting blocks delivery of PDFs (and other
+    // non-image documents) uploaded as resource_type "image"/"auto" with a 401
+    // "deny or ACL failure" — confirmed by direct testing, and it affects every such
+    // file regardless of age or delivery type. Uploading them as "raw" instead
+    // bypasses the image-delivery pipeline entirely and is unaffected by that
+    // restriction. Actual images (jpg/png/webp) are unaffected and keep using "auto".
+    const resourceType = mimetype.startsWith('image/') ? 'auto' : 'raw';
+
     const stream = cloudinary.uploader.upload_stream(
       {
         folder: `riet/${folder}`,
-        resource_type: 'auto',
+        resource_type: resourceType,
         use_filename: false,
         unique_filename: true,
+        // Plain public delivery — the random, non-guessable public_id
+        // (unique_filename: true) is the achievable protection against enumeration
+        // on this account's plan (see git history for why type:'authenticated' was
+        // tried and reverted).
       },
       (error, result) => {
         if (error) return reject(error);

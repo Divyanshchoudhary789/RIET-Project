@@ -7,6 +7,7 @@ const purchaseOrderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Memo',
       required: [true, 'Memo reference is required'],
+      unique: true,
     },
     poNumber: {
       type: String,
@@ -72,7 +73,6 @@ const purchaseOrderSchema = new mongoose.Schema(
 );
 
 purchaseOrderSchema.index({ status: 1, createdAt: -1 });
-purchaseOrderSchema.index({ memoRef: 1 });
 
 // Human-readable reference derived from _id
 purchaseOrderSchema.virtual('referenceNumber').get(function () {

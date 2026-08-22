@@ -12,7 +12,7 @@ const listStockItems = async (req, res, next) => {
 
 const getStockItemById = async (req, res, next) => {
   try {
-    const item = await stockService.getStockItemById(req.params.id);
+    const item = await stockService.getStockItemById(req.params.id, req.user);
     return sendSuccess(res, 200, 'Stock item retrieved.', item);
   } catch (err) {
     next(err);

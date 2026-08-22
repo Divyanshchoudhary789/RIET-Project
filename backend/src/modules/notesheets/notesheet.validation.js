@@ -10,7 +10,7 @@ const quotationSchema = Joi.object({
     'number.min': 'Amount cannot be negative.',
     'any.required': 'Quotation amount is required.',
   }),
-  validity: Joi.date().iso().min(new Date(new Date().setHours(0, 0, 0, 0))).required().messages({
+  validity: Joi.date().iso().min('now').required().messages({
     'date.min': 'Quotation validity date cannot be in the past. Please enter today\'s date or a future date.',
     'date.base': 'Quotation validity must be a valid date.',
     'any.required': 'Quotation validity date is required.',

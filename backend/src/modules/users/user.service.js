@@ -46,7 +46,22 @@ const listUsers = async (requestingUser, query) => {
   return { users, meta: buildPaginationMeta(page, limit, total) };
 };
 
-const getUserById = async (userId) => {
+// Roles a Director is not permitted to view/manage via these endpoints (hierarchy protection)
+const DIRECTOR_BLOCKED_TARGETS = [ROLES.CHAIRPERSON, ROLES.DIRECTOR];
+
+const assertManageable = (requestingUser, targetUser) => {
+  if (
+    requestingUser.role === ROLES.DIRECTOR &&
+    DIRECTOR_BLOCKED_TARGETS.includes(targetUser.role) &&
+    targetUser._id.toString() !== requestingUser._id.toString()
+  ) {
+    const error = new Error('You do not have permission to access this account.');
+    error.statusCode = 403;
+    throw error;
+  }
+};
+
+const getUserById = async (userId, requestingUser) => {
   const user = await User.findById(userId)
     .select('-passwordHash -refreshTokens -passwordResetToken -passwordResetExpiry')
     .populate('scopeRef', 'name code')
@@ -58,15 +73,31 @@ const getUserById = async (userId) => {
     throw error;
   }
 
+  assertManageable(requestingUser, user);
+
   return user;
 };
 
-const updateUser = async (userId, updates) => {
+const updateUser = async (userId, updates, requestingUser) => {
+  const target = await User.findById(userId).select('role');
+  if (!target) {
+    const error = new Error('User not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  assertManageable(requestingUser, target);
+
   const allowed = ['name', 'isActive'];
   const safeUpdates = {};
   allowed.forEach((key) => {
     if (updates[key] !== undefined) safeUpdates[key] = updates[key];
   });
+
+  // Revoke all active sessions when an account is deactivated
+  if (safeUpdates.isActive === false) {
+    safeUpdates.refreshTokens = [];
+  }
 
   const user = await User.findByIdAndUpdate(userId, safeUpdates, { new: true, runValidators: true })
     .select('-passwordHash -refreshTokens -passwordResetToken -passwordResetExpiry');

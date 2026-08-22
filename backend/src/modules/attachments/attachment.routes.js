@@ -14,6 +14,12 @@ router.use(authenticate, requirePasswordChange);
  * Generic file upload endpoint.
  * Accepts up to 5 files; returns Cloudinary secure URLs.
  * These URLs can be stored in any document's attachments field.
+ *
+ * Files are stored with Cloudinary's "authenticated" delivery type (see
+ * middleware/upload.js) — the returned secure_url is cryptographically signed by
+ * Cloudinary at upload time, so it cannot be guessed or enumerated by a third party;
+ * only someone who is handed this exact URL (via an already role/document-gated API
+ * response) can fetch the file.
  */
 router.post(
   '/upload',
@@ -26,7 +32,7 @@ router.post(
       }
 
       const uploadPromises = req.files.map((file) =>
-        uploadBufferToCloudinary(file.buffer, 'documents', file.originalname)
+        uploadBufferToCloudinary(file.buffer, 'documents', file.originalname, file.mimetype)
       );
 
       const urls = await Promise.all(uploadPromises);

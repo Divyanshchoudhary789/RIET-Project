@@ -49,6 +49,8 @@ const ResubmitNotesheet = lazy(() => import('./pages/poOffice/ResubmitNotesheet'
 const ChairpersonDashboard = lazy(() => import('./pages/chairperson/ChairpersonDashboard'));
 const ChairMemos = lazy(() => import('./pages/chairperson/MemosList'));
 const ChairUsers = lazy(() => import('./pages/chairperson/UsersList'));
+const ChairCampuses = lazy(() => import('./pages/chairperson/CampusesList'));
+const ChairDepartments = lazy(() => import('./pages/chairperson/DepartmentsList'));
 
 // ── Accounts ──
 const AccountsDashboard = lazy(() => import('./pages/accounts/AccountsDashboard'));
@@ -178,6 +180,8 @@ const App = () => (
             <Route index element={<ChairpersonDashboard />} />
             <Route path="memos" element={<ChairMemos />} />
             <Route path="users" element={<ChairUsers />} />
+            <Route path="campuses" element={<ChairCampuses />} />
+            <Route path="departments" element={<ChairDepartments />} />
             <Route path="stock" element={<StockPage />} />
           </Route>
 

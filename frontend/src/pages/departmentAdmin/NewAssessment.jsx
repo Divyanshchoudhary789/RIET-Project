@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage } from '../../utils/helpers';
@@ -9,11 +9,12 @@ const RECOMMENDED_ACTIONS = ['approve', 'reject', 'defer', 'partial_approve'];
 
 const NewAssessment = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [proposals, setProposals]   = useState([]);
   const [loadingData, setLoadingData] = useState(true);
 
   const [form, setForm] = useState({
-    workProposalRef: '',
+    workProposalRef: location.state?.workProposalId || '',
     feasibilityNotes: '',
     estimatedCost: '',
     technicalRemarks: '',

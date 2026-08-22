@@ -1,4 +1,6 @@
 const notesheetService = require('./notesheet.service');
+const requirementService = require('../requirements/requirement.service');
+const { resolveRequirementIdFromNotesheet } = require('../../utils/chainResolver');
 const { sendSuccess } = require('../../utils/response');
 
 const listNotesheets = async (req, res, next) => {
@@ -46,4 +48,14 @@ const rejectNotesheet = async (req, res, next) => {
   }
 };
 
-module.exports = { listNotesheets, getNotesheetById, createNotesheet, resubmitNotesheet, rejectNotesheet };
+const getNotesheetChain = async (req, res, next) => {
+  try {
+    const requirementId = await resolveRequirementIdFromNotesheet(req.params.id);
+    const chain = requirementId ? await requirementService.getRequirementChain(requirementId, req.user) : null;
+    return sendSuccess(res, 200, 'Notesheet chain retrieved.', chain);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { listNotesheets, getNotesheetById, createNotesheet, resubmitNotesheet, rejectNotesheet, getNotesheetChain };

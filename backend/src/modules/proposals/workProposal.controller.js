@@ -1,4 +1,6 @@
 const workProposalService = require('./workProposal.service');
+const requirementService = require('../requirements/requirement.service');
+const { resolveRequirementIdFromWorkProposal } = require('../../utils/chainResolver');
 const { sendSuccess } = require('../../utils/response');
 
 const listWorkProposals = async (req, res, next) => {
@@ -12,7 +14,7 @@ const listWorkProposals = async (req, res, next) => {
 
 const getWorkProposalById = async (req, res, next) => {
   try {
-    const proposal = await workProposalService.getWorkProposalById(req.params.id);
+    const proposal = await workProposalService.getWorkProposalById(req.params.id, req.user);
     return sendSuccess(res, 200, 'Work proposal retrieved.', proposal);
   } catch (err) {
     next(err);
@@ -50,10 +52,21 @@ const rejectWorkProposal = async (req, res, next) => {
   }
 };
 
+const getWorkProposalChain = async (req, res, next) => {
+  try {
+    const requirementId = await resolveRequirementIdFromWorkProposal(req.params.id);
+    const chain = requirementId ? await requirementService.getRequirementChain(requirementId, req.user) : null;
+    return sendSuccess(res, 200, 'Work proposal chain retrieved.', chain);
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   listWorkProposals,
   getWorkProposalById,
   createWorkProposal,
   resubmitWorkProposal,
   rejectWorkProposal,
+  getWorkProposalChain,
 };

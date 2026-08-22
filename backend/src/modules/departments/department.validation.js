@@ -18,6 +18,12 @@ const createDepartmentSchema = Joi.object({
 const updateDepartmentSchema = Joi.object({
   name: Joi.string().min(2).max(100).trim().optional(),
   isActive: Joi.boolean().optional(),
+  adminData: Joi.object({
+    name: Joi.string().min(2).max(100).trim().required(),
+    email: Joi.string().email().required(),
+  })
+    .optional()
+    .allow(null),
 });
 
 module.exports = { createDepartmentSchema, updateDepartmentSchema };

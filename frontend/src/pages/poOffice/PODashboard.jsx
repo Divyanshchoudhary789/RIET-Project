@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCheck, FileText, ArrowRight } from 'lucide-react';
+import { FileCheck, FileText, ArrowRight, Eye } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass } from '../../utils/helpers';
 import useSocketEvent from '../../hooks/useSocketEvent';
+import DocumentDrawer from '../../components/DocumentDrawer';
 import '../../styles/pages.css';
 
 const PODashboard = () => {
@@ -12,6 +13,7 @@ const PODashboard = () => {
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedAssessment, setSelectedAssessment] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -84,15 +86,32 @@ const PODashboard = () => {
           </div>
           <div className="table-wrap">
             <table className="table">
-              <thead><tr><th>Ref</th><th>Status</th><th>Date</th></tr></thead>
+              <thead><tr><th>Ref</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
               <tbody>
                 {data.assessments.length === 0 ? (
-                  <tr><td colSpan={3}><div className="empty-state" style={{ padding: 24 }}><h3>None forwarded</h3></div></td></tr>
+                  <tr><td colSpan={4}><div className="empty-state" style={{ padding: 24 }}><h3>None forwarded</h3></div></td></tr>
                 ) : data.assessments.map((a) => (
                   <tr key={a._id}>
                     <td style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>{a.referenceNumber || a._id?.slice(-8)}</td>
                     <td><span className={`badge ${getStatusClass(a.status)}`}>{a.status}</span></td>
                     <td>{formatDate(a.createdAt)}</td>
+                    <td>
+                      <div className="actions-cell">
+                        <button className="action-btn action-view" onClick={() => setSelectedAssessment(a)}>
+                          <Eye size={13} /> View
+                        </button>
+                        {a.notesheetRef ? (
+                          <span className="badge badge-approved" style={{ fontSize: 11 }}>Notesheet Created</span>
+                        ) : (
+                          <button
+                            className="action-btn action-forward"
+                            onClick={() => navigate(`/po-office/notesheets/new?assessmentId=${a._id}`)}
+                          >
+                            <FileText size={13} /> Create Notesheet
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -123,6 +142,24 @@ const PODashboard = () => {
           </div>
         </div>
       </div>
+
+      {selectedAssessment && (
+        <DocumentDrawer
+          doc={selectedAssessment}
+          docType="Assessment"
+          onClose={() => setSelectedAssessment(null)}
+          footer={
+            selectedAssessment.notesheetRef ? null : (
+              <button
+                className="btn btn-primary"
+                onClick={() => { setSelectedAssessment(null); navigate(`/po-office/notesheets/new?assessmentId=${selectedAssessment._id}`); }}
+              >
+                <FileText size={15} /> Create Notesheet
+              </button>
+            )
+          }
+        />
+      )}
     </div>
   );
 };

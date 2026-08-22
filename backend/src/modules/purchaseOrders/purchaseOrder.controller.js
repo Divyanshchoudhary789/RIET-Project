@@ -1,4 +1,6 @@
 const purchaseOrderService = require('./purchaseOrder.service');
+const requirementService = require('../requirements/requirement.service');
+const { resolveRequirementIdFromPurchaseOrder } = require('../../utils/chainResolver');
 const { uploadBufferToCloudinary } = require('../../middleware/upload');
 const { sendSuccess } = require('../../utils/response');
 
@@ -37,7 +39,8 @@ const uploadPerformaInvoice = async (req, res, next) => {
     const piAttachmentUrl = await uploadBufferToCloudinary(
       req.file.buffer,
       'performa-invoices',
-      req.file.originalname
+      req.file.originalname,
+      req.file.mimetype
     );
     const order = await purchaseOrderService.uploadPerformaInvoice(req.params.id, piAttachmentUrl, req.user);
     return sendSuccess(res, 200, 'Performa Invoice uploaded.', order);
@@ -55,10 +58,21 @@ const markGoodsReceived = async (req, res, next) => {
   }
 };
 
+const getPurchaseOrderChain = async (req, res, next) => {
+  try {
+    const requirementId = await resolveRequirementIdFromPurchaseOrder(req.params.id);
+    const chain = requirementId ? await requirementService.getRequirementChain(requirementId, req.user) : null;
+    return sendSuccess(res, 200, 'Purchase order chain retrieved.', chain);
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   listPurchaseOrders,
   getPurchaseOrderById,
   createPurchaseOrder,
   uploadPerformaInvoice,
   markGoodsReceived,
+  getPurchaseOrderChain,
 };

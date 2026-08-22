@@ -66,4 +66,30 @@ const stockItemSchema = new mongoose.Schema(
 stockItemSchema.index({ ownerType: 1, ownerRef: 1 });
 stockItemSchema.index({ itemName: 'text', category: 'text' });
 
+// ownerModel must always agree with ownerType for the refPath populate on ownerRef to
+// work — derive it automatically instead of relying on every write path to set it
+// correctly by hand (a mismatch here silently breaks population, not an error).
+const deriveOwnerModel = (ownerType) => {
+  if (ownerType === 'campus') return 'Campus';
+  if (ownerType === 'department') return 'Department';
+  return null;
+};
+
+stockItemSchema.pre('save', function (next) {
+  this.ownerModel = deriveOwnerModel(this.ownerType);
+  next();
+});
+
+// Also cover atomic findOneAndUpdate/upsert writes (e.g. the goods-received stock
+// increment), which bypass document middleware entirely.
+stockItemSchema.pre('findOneAndUpdate', function (next) {
+  const update = this.getUpdate() || {};
+  const ownerType = update.ownerType || update.$set?.ownerType || this.getQuery()?.ownerType;
+  if (ownerType) {
+    update.$set = { ...(update.$set || {}), ownerModel: deriveOwnerModel(ownerType) };
+    this.setUpdate(update);
+  }
+  next();
+});
+
 module.exports = mongoose.model('StockItem', stockItemSchema);

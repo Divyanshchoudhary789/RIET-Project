@@ -106,7 +106,17 @@ const AccountsDashboard = () => {
                   <td>
                     <div className="actions-cell">
                       <button className="action-btn action-view" onClick={() => setSelectedMemo(m)}><Eye size={13} /> View</button>
-                      <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => navigate('/accounts/memos')}>Generate PO</button>
+                      {m.purchaseOrderRef ? (
+                        <span
+                          className="badge badge-approved"
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => navigate(`/accounts/purchase-orders/${m.purchaseOrderRef._id || m.purchaseOrderRef}`)}
+                        >
+                          PO Generated
+                        </span>
+                      ) : (
+                        <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => navigate('/accounts/memos')}>Generate PO</button>
+                      )}
                     </div>
                   </td>
                 </tr>

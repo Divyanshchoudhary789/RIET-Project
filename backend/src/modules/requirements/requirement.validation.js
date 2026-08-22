@@ -12,6 +12,10 @@ const requirementItemSchema = Joi.object({
 });
 
 const createRequirementSchema = Joi.object({
+  title: Joi.string().trim().min(3).max(200).required().messages({
+    'string.min': 'Title must be at least 3 characters.',
+    'any.required': 'Title is required.',
+  }),
   items: Joi.array().items(requirementItemSchema).min(1).required().messages({
     'array.min': 'At least one item is required.',
     'any.required': 'Items are required.',

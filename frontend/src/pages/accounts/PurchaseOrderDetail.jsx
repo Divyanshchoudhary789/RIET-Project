@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, FileText, Upload, PackageCheck, Printer,
+  ArrowLeft, FileText, Upload, PackageCheck, Printer, X,
   CheckCircle2, DollarSign, Building, Award, Package, Clock,
 } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, formatCurrency, getStatusClass } from '../../utils/helpers';
 import Timeline from '../../components/Timeline';
+import ApprovalJourney from '../../components/ApprovalJourney';
+import useModalA11y from '../../hooks/useModalA11y';
+import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
 const Field = ({ label, value, mono }) => (
@@ -23,6 +26,7 @@ const PurchaseOrderDetail = () => {
   const [po, setPo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [chain, setChain] = useState(null);
 
   const [piFile, setPiFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -32,6 +36,8 @@ const PurchaseOrderDetail = () => {
   const [showGoodsModal, setShowGoodsModal] = useState(false);
   const [receiving, setReceiving] = useState(false);
   const [receivingError, setReceivingError] = useState('');
+
+  useModalA11y(() => { if (!receiving) setShowGoodsModal(false); }, showGoodsModal);
 
   const fetchPO = useCallback(async () => {
     setLoading(true);
@@ -46,7 +52,30 @@ const PurchaseOrderDetail = () => {
     }
   }, [id]);
 
-  useEffect(() => { fetchPO(); }, [fetchPO]);
+  // Full approval-chain journey (Requirement → ... → Purchase Order) — falls
+  // back to just this PO's own timeline below if it can't be resolved. Called
+  // alongside fetchPO() (both on load and after any status-changing action) so
+  // the Approval Journey section never goes stale relative to the Audit Trail.
+  const fetchChain = useCallback(async () => {
+    try {
+      const r = await api.get(`/api/purchase-orders/${id}/chain`);
+      setChain(r.data?.data || null);
+    } catch {
+      setChain(null);
+    }
+  }, [id]);
+
+  useEffect(() => { fetchPO(); fetchChain(); }, [fetchPO, fetchChain]);
+
+  // Live-refresh if this PO (or anything upstream in its chain) changes while this
+  // page is open in another tab/session — e.g. another Accounts user, or Director
+  // activity further up the chain.
+  useSocketEvent('dashboard:refresh', (payload) => {
+    if (['purchaseOrder', 'memo', 'notesheet', 'assessment', 'workProposal', 'requirement'].includes(payload?.entity)) {
+      fetchPO();
+      fetchChain();
+    }
+  });
 
   const handleUploadPI = async (e) => {
     e.preventDefault();
@@ -58,7 +87,7 @@ const PurchaseOrderDetail = () => {
       fd.append('piFile', piFile);
       await api.patch(`/api/purchase-orders/${id}/upload-pi`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setPiFile(null);
-      await fetchPO();
+      await Promise.all([fetchPO(), fetchChain()]);
     } catch (err) {
       setUploadError(getErrorMessage(err));
     } finally {
@@ -73,7 +102,7 @@ const PurchaseOrderDetail = () => {
     try {
       await api.patch(`/api/purchase-orders/${id}/goods-received`, { note: goodsNote.trim() });
       setShowGoodsModal(false);
-      await fetchPO();
+      await Promise.all([fetchPO(), fetchChain()]);
     } catch (err) {
       setReceivingError(getErrorMessage(err));
     } finally {
@@ -222,8 +251,8 @@ const PurchaseOrderDetail = () => {
           </div>
         </div>
 
-        {/* Audit Timeline */}
-        <div className="section-card" style={{ padding: 24 }}>
+        {/* Audit Trail — this PO's own history */}
+        <div className="section-card" style={{ padding: 24, marginBottom: chain ? 20 : 0 }}>
           <h2 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Clock size={16} color="var(--color-accent)" /> Audit Trail
           </h2>
@@ -233,6 +262,16 @@ const PurchaseOrderDetail = () => {
             <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>No timeline entries.</div>
           )}
         </div>
+
+        {/* Approval Journey — the complete end-to-end chain across every stage */}
+        {chain && (
+          <div className="section-card" style={{ padding: 24 }}>
+            <h2 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Clock size={16} color="var(--color-accent)" /> Approval Journey
+            </h2>
+            <ApprovalJourney chain={chain} requirementTimeline={chain.requirement?.timeline || []} />
+          </div>
+        )}
       </div>
 
       {/* Linked Memo Summary */}
@@ -355,11 +394,11 @@ const PurchaseOrderDetail = () => {
 
       {/* Goods Received Modal */}
       {showGoodsModal && (
-        <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: 480 }}>
+        <div className="modal-overlay" onClick={() => { if (!receiving) setShowGoodsModal(false); }}>
+          <div className="modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <span className="modal-title">Confirm Goods Received</span>
-              <button className="modal-close" onClick={() => setShowGoodsModal(false)}><ArrowLeft size={18} /></button>
+              <button className="modal-close" onClick={() => setShowGoodsModal(false)} aria-label="Close" disabled={receiving}><X size={18} /></button>
             </div>
             <form onSubmit={handleGoodsReceived}>
               <div className="modal-body" style={{ padding: 24 }}>

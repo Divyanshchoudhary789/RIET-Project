@@ -6,6 +6,7 @@ const { buildTimelineEntry } = require('../../utils/timeline');
 const { createNotification, notifyMany, emitDashboardRefresh } = require('../notifications/notification.service');
 const { DOCUMENT_STATUS, TIMELINE_ACTIONS, ROLES } = require('../../config/constants');
 const { getPaginationParams, buildPaginationMeta } = require('../../utils/pagination');
+const { applyAtomicTransition, throwTransitionConflict } = require('../../utils/atomicTransition');
 
 const buildFilter = (user, query) => {
   const filter = {};
@@ -39,7 +40,7 @@ const listWorkProposals = async (user, query) => {
   return { proposals, meta: buildPaginationMeta(page, limit, total) };
 };
 
-const getWorkProposalById = async (proposalId) => {
+const getWorkProposalById = async (proposalId, user) => {
   const proposal = await WorkProposal.findById(proposalId)
     .populate({ path: 'requirementRefs', populate: { path: 'campusRef', select: 'name code' } })
     .populate('departmentRefs', 'name code')
@@ -50,6 +51,14 @@ const getWorkProposalById = async (proposalId) => {
     const error = new Error('Work proposal not found.');
     error.statusCode = 404;
     throw error;
+  }
+  if (user.role === ROLES.DEPARTMENT_ADMIN) {
+    const isAssigned = proposal.departmentRefs.some((d) => d._id.toString() === user.scopeRef.toString());
+    if (!isAssigned) {
+      const error = new Error('You can only access work proposals assigned to your own department.');
+      error.statusCode = 403;
+      throw error;
+    }
   }
   return proposal;
 };
@@ -162,21 +171,40 @@ const resubmitWorkProposal = async (proposalId, data, clusterManager) => {
 };
 
 const rejectWorkProposal = async (proposalId, note, departmentAdmin) => {
-  const proposal = await WorkProposal.findById(proposalId).populate('createdBy', 'name email');
-  if (!proposal) {
+  // Authorization (department assignment) is a fixed property, safe to check up front
+  // before the atomic status transition below.
+  const existing = await WorkProposal.findById(proposalId).select('departmentRefs status');
+  if (!existing) {
     const error = new Error('Work proposal not found.');
     error.statusCode = 404;
     throw error;
   }
-  if (proposal.status !== DOCUMENT_STATUS.SUBMITTED && proposal.status !== DOCUMENT_STATUS.REVISED) {
-    const error = new Error(`Cannot reject a proposal with status: ${proposal.status}`);
-    error.statusCode = 400;
+  const isAssigned = existing.departmentRefs.map((d) => d.toString()).includes(departmentAdmin.scopeRef.toString());
+  if (!isAssigned) {
+    const error = new Error('This work proposal is not assigned to your department.');
+    error.statusCode = 403;
     throw error;
   }
 
-  proposal.status = DOCUMENT_STATUS.REJECTED;
-  proposal.timeline.push(buildTimelineEntry(departmentAdmin, TIMELINE_ACTIONS.REJECTED, note));
-  await proposal.save();
+  const proposal = await applyAtomicTransition(
+    WorkProposal,
+    proposalId,
+    [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.REVISED],
+    {
+      $set: { status: DOCUMENT_STATUS.REJECTED },
+      $push: { timeline: buildTimelineEntry(departmentAdmin, TIMELINE_ACTIONS.REJECTED, note) },
+    },
+    { path: 'createdBy', select: 'name email' }
+  );
+
+  if (!proposal) {
+    await throwTransitionConflict(
+      WorkProposal,
+      proposalId,
+      'Work proposal not found.',
+      'This work proposal is no longer pending review — it may have already been processed.'
+    );
+  }
 
   await createNotification({
     userId: proposal.createdBy._id,

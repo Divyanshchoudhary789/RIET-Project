@@ -30,7 +30,7 @@ const createCampus = async (req, res, next) => {
 
 const updateCampus = async (req, res, next) => {
   try {
-    const campus = await campusService.updateCampus(req.params.id, req.body);
+    const campus = await campusService.updateCampus(req.params.id, { ...req.body, updatedBy: req.user._id });
     return sendSuccess(res, 200, 'Campus updated.', campus);
   } catch (err) {
     next(err);

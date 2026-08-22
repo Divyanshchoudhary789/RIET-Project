@@ -9,11 +9,16 @@ const { buildTimelineEntry } = require('../../utils/timeline');
 const { createNotification, emitDashboardRefresh } = require('../notifications/notification.service');
 const { DOCUMENT_STATUS, TIMELINE_ACTIONS, ROLES } = require('../../config/constants');
 const { getPaginationParams, buildPaginationMeta } = require('../../utils/pagination');
+const { applyAtomicTransition, throwTransitionConflict } = require('../../utils/atomicTransition');
 
-const buildFilter = (user, query) => {
+const buildFilter = async (user, query) => {
   const filter = {};
   if (user.role === ROLES.CENTER_HEAD) {
     filter.campusRef = user.scopeRef;
+  } else if (user.role === ROLES.DEPARTMENT_ADMIN) {
+    // A department admin may only see requirements that reached their department via a work proposal
+    const proposalIds = await WorkProposal.find({ departmentRefs: user.scopeRef }).distinct('_id');
+    filter.workProposalRef = { $in: proposalIds };
   } else {
     if (query.campusRef) filter.campusRef = query.campusRef;
   }
@@ -21,14 +26,14 @@ const buildFilter = (user, query) => {
   if (query.priority) filter.priority = query.priority;
   if (query.search) {
     const regex = new RegExp(query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    filter.$or = [{ justification: regex }];
+    filter.$or = [{ title: regex }, { justification: regex }];
   }
   return filter;
 };
 
 const listRequirements = async (user, query) => {
   const { page, limit, skip } = getPaginationParams(query);
-  const filter = buildFilter(user, query);
+  const filter = await buildFilter(user, query);
   const [requirements, total] = await Promise.all([
     Requirement.find(filter)
       .populate('campusRef', 'name code')
@@ -60,7 +65,25 @@ const getRequirementById = async (requirementId, user) => {
     error.statusCode = 403;
     throw error;
   }
+  if (user.role === ROLES.DEPARTMENT_ADMIN) {
+    await assertDepartmentAdminAccess(requirement, user);
+  }
   return requirement;
+};
+
+const assertDepartmentAdminAccess = async (requirement, user) => {
+  // requirement.workProposalRef may already be a populated document (partial fields only) —
+  // resolve its _id explicitly rather than passing the whole object to findById.
+  const workProposalId = requirement.workProposalRef?._id || requirement.workProposalRef;
+  const proposal = workProposalId
+    ? await WorkProposal.findById(workProposalId).select('departmentRefs')
+    : null;
+  const isAssigned = proposal?.departmentRefs.some((d) => d.toString() === user.scopeRef.toString());
+  if (!isAssigned) {
+    const error = new Error('You do not have access to this requirement.');
+    error.statusCode = 403;
+    throw error;
+  }
 };
 
 const createRequirement = async (data, user) => {
@@ -73,6 +96,7 @@ const createRequirement = async (data, user) => {
   const requirement = await Requirement.create({
     campusRef: user.scopeRef,
     createdBy: user._id,
+    title: data.title,
     items: data.items,
     priority: data.priority,
     justification: data.justification,
@@ -103,23 +127,25 @@ const createRequirement = async (data, user) => {
 };
 
 const rejectRequirement = async (requirementId, note, clusterManager) => {
-  const requirement = await Requirement.findById(requirementId)
-    .populate('createdBy', 'name email');
+  const requirement = await applyAtomicTransition(
+    Requirement,
+    requirementId,
+    [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.REVISED],
+    {
+      $set: { status: DOCUMENT_STATUS.REJECTED },
+      $push: { timeline: buildTimelineEntry(clusterManager, TIMELINE_ACTIONS.REJECTED, note) },
+    },
+    { path: 'createdBy', select: 'name email' }
+  );
 
   if (!requirement) {
-    const error = new Error('Requirement not found.');
-    error.statusCode = 404;
-    throw error;
+    await throwTransitionConflict(
+      Requirement,
+      requirementId,
+      'Requirement not found.',
+      'This requirement is no longer pending review — it may have already been processed.'
+    );
   }
-  if (requirement.status !== DOCUMENT_STATUS.SUBMITTED && requirement.status !== DOCUMENT_STATUS.REVISED) {
-    const error = new Error(`Cannot reject a requirement with status: ${requirement.status}`);
-    error.statusCode = 400;
-    throw error;
-  }
-
-  requirement.status = DOCUMENT_STATUS.REJECTED;
-  requirement.timeline.push(buildTimelineEntry(clusterManager, TIMELINE_ACTIONS.REJECTED, note));
-  await requirement.save();
 
   await createNotification({
     userId: requirement.createdBy._id,
@@ -162,6 +188,7 @@ const resubmitRequirement = async (requirementId, data, user) => {
     throw error;
   }
 
+  requirement.title = data.title || requirement.title;
   requirement.items = data.items || requirement.items;
   requirement.priority = data.priority || requirement.priority;
   requirement.justification = data.justification || requirement.justification;
@@ -225,6 +252,9 @@ const getRequirementChain = async (requirementId, user) => {
     const error = new Error('You do not have access to this requirement.');
     error.statusCode = 403;
     throw error;
+  }
+  if (user.role === ROLES.DEPARTMENT_ADMIN) {
+    await assertDepartmentAdminAccess(requirement, user);
   }
 
   const chain = {

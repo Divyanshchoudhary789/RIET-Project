@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage } from '../../utils/helpers';
@@ -7,6 +7,7 @@ import '../../styles/pages.css';
 
 const NewWorkProposal = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [requirements, setRequirements] = useState([]);
   const [departments, setDepartments]   = useState([]);
@@ -14,7 +15,7 @@ const NewWorkProposal = () => {
 
   const [title, setTitle]               = useState('');
   const [description, setDescription]   = useState('');
-  const [selectedReqs, setSelectedReqs] = useState([]);
+  const [selectedReqs, setSelectedReqs] = useState(location.state?.requirementIds || []);
   const [selectedDepts, setSelectedDepts] = useState([]);
 
   const [loading, setLoading]           = useState(false);

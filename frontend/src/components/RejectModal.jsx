@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
+import useModalA11y from '../hooks/useModalA11y';
 
 const RejectModal = ({ title = 'Reject', onConfirm, onClose, loading }) => {
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
+
+  useModalA11y(() => { if (!loading) onClose(); });
 
   const handleSubmit = () => {
     if (!note.trim() || note.trim().length < 5) {
@@ -14,11 +17,11 @@ const RejectModal = ({ title = 'Reject', onConfirm, onClose, loading }) => {
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal" style={{ maxWidth: 460 }}>
+    <div className="modal-overlay" onClick={() => { if (!loading) onClose(); }}>
+      <div className="modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">{title}</span>
-          <button className="modal-close" onClick={onClose} disabled={loading}>
+          <button className="modal-close" onClick={onClose} disabled={loading} aria-label="Close">
             <X size={18} />
           </button>
         </div>

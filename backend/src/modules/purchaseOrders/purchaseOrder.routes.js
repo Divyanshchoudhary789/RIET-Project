@@ -24,6 +24,12 @@ router.get(
   purchaseOrderController.getPurchaseOrderById
 );
 
+router.get(
+  '/:id/chain',
+  authorize(ROLES.ACCOUNTS, ROLES.DIRECTOR, ROLES.CHAIRPERSON),
+  purchaseOrderController.getPurchaseOrderChain
+);
+
 router.post(
   '/',
   authorize(ROLES.ACCOUNTS),

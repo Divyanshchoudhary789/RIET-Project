@@ -49,6 +49,8 @@ const NAV_CONFIG = {
   chairperson: [
     { label: 'Dashboard', path: '/chairperson', icon: LayoutDashboard, end: true },
     { label: 'Memos', path: '/chairperson/memos', icon: Briefcase },
+    { label: 'Campuses', path: '/chairperson/campuses', icon: Building2 },
+    { label: 'Departments', path: '/chairperson/departments', icon: BarChart2 },
     { label: 'Users', path: '/chairperson/users', icon: Users },
     { label: 'Stock', path: '/chairperson/stock', icon: Package },
   ],
@@ -226,7 +228,7 @@ const AppLayout = () => {
             <span className="sidebar-brand-name">RIET</span>
             <span className="sidebar-brand-role">{getRoleLabel(user?.role)}</span>
           </div>
-          <button className="sidebar-close show-mobile-only" onClick={() => setSidebarOpen(false)}>
+          <button className="sidebar-close show-mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
             <X size={18} />
           </button>
         </div>
@@ -254,7 +256,7 @@ const AppLayout = () => {
               <span className="sidebar-user-email">{user?.email}</span>
             </div>
           </div>
-          <button className="sidebar-logout" onClick={handleLogout} title="Sign out">
+          <button className="sidebar-logout" onClick={handleLogout} title="Sign out" aria-label="Sign out">
             <LogOut size={17} />
           </button>
         </div>

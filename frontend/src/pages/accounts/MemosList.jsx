@@ -151,13 +151,23 @@ const MemosList = () => {
                         <button className="action-btn action-view" onClick={() => setSelectedMemo(m)}>
                           <Eye size={13} /> View
                         </button>
-                        <button
-                          className="btn btn-primary"
-                          style={{ padding: '4px 10px', fontSize: 12 }}
-                          onClick={() => openPoModal(m)}
-                        >
-                          <ShoppingCart size={13} /> Issue PO
-                        </button>
+                        {m.purchaseOrderRef ? (
+                          <span
+                            className="badge badge-approved"
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => navigate(`/accounts/purchase-orders/${m.purchaseOrderRef._id || m.purchaseOrderRef}`)}
+                          >
+                            PO Generated
+                          </span>
+                        ) : (
+                          <button
+                            className="btn btn-primary"
+                            style={{ padding: '4px 10px', fontSize: 12 }}
+                            onClick={() => openPoModal(m)}
+                          >
+                            <ShoppingCart size={13} /> Issue PO
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -174,9 +184,18 @@ const MemosList = () => {
           docType="Memo"
           onClose={() => setSelectedMemo(null)}
           footer={
-            <button className="btn btn-primary" onClick={() => { setSelectedMemo(null); openPoModal(selectedMemo); }}>
-              Issue Purchase Order
-            </button>
+            selectedMemo.purchaseOrderRef ? (
+              <button
+                className="btn btn-primary"
+                onClick={() => { const id = selectedMemo.purchaseOrderRef._id || selectedMemo.purchaseOrderRef; setSelectedMemo(null); navigate(`/accounts/purchase-orders/${id}`); }}
+              >
+                View Purchase Order
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={() => { setSelectedMemo(null); openPoModal(selectedMemo); }}>
+                Issue Purchase Order
+              </button>
+            )
           }
         />
       )}

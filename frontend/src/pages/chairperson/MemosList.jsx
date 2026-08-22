@@ -159,6 +159,7 @@ const MemosList = () => {
                             <button
                               className="btn btn-primary"
                               style={{ padding: '4px 10px', fontSize: 12 }}
+                              disabled={actionLoading}
                               onClick={() => handleApproveMemo(m._id)}
                             >
                               Approve
@@ -166,6 +167,7 @@ const MemosList = () => {
                             <button
                               className="btn btn-danger"
                               style={{ padding: '4px 10px', fontSize: 12 }}
+                              disabled={actionLoading}
                               onClick={() => setRejectingMemoId(m._id)}
                             >
                               Reject

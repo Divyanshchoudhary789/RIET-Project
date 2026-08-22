@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Search, Eye } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Eye, FileText } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass, formatCurrency } from '../../utils/helpers';
 import DocumentDetail from '../../components/DocumentDetail';
@@ -7,6 +8,7 @@ import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
 const AssessmentsList = () => {
+  const navigate = useNavigate();
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
@@ -87,9 +89,21 @@ const AssessmentsList = () => {
                   <td><span className={`badge ${getStatusClass(a.status)}`}>{a.status}</span></td>
                   <td>{formatDate(a.createdAt)}</td>
                   <td>
-                    <button className="action-btn action-view" onClick={() => setSelected(a)}>
-                      <Eye size={13} /> View
-                    </button>
+                    <div className="actions-cell">
+                      <button className="action-btn action-view" onClick={() => setSelected(a)}>
+                        <Eye size={13} /> View
+                      </button>
+                      {a.notesheetRef ? (
+                        <span className="badge badge-approved" style={{ fontSize: 11 }}>Notesheet Created</span>
+                      ) : (
+                        <button
+                          className="action-btn action-forward"
+                          onClick={() => navigate(`/po-office/notesheets/new?assessmentId=${a._id}`)}
+                        >
+                          <FileText size={13} /> Create Notesheet
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

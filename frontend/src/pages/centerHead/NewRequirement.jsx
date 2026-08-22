@@ -11,6 +11,7 @@ const makeItem = () => ({ _key: crypto.randomUUID(), name: '', quantity: 1, unit
 
 const NewRequirement = () => {
   const navigate = useNavigate();
+  const [title, setTitle] = useState('');
   const [priority, setPriority] = useState('medium');
   const [justification, setJustification] = useState('');
   const [items, setItems] = useState([makeItem()]);
@@ -26,6 +27,7 @@ const NewRequirement = () => {
   };
 
   const validate = () => {
+    if (!title.trim() || title.trim().length < 3) return 'Title must be at least 3 characters.';
     if (!justification.trim() || justification.trim().length < 10) return 'Justification must be at least 10 characters.';
     for (const it of items) {
       if (!it.name.trim()) return 'Each item must have a name.';
@@ -42,6 +44,7 @@ const NewRequirement = () => {
     setError(''); setSubmitting(true);
     try {
       await api.post('/api/requirements', {
+        title: title.trim(),
         priority,
         justification: justification.trim(),
         items: items.map(({ name, quantity, unit, description }) => ({
@@ -73,6 +76,12 @@ const NewRequirement = () => {
         <div className="form-card">
           <div className="form-card-title">Details</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div className="form-field">
+              <label className="form-label required">Title</label>
+              <input className="form-input" value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. New Laptops for Computer Lab" maxLength={200} />
+            </div>
             <div className="form-field">
               <label className="form-label required">Priority</label>
               <div className="priority-options">

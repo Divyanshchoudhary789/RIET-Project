@@ -25,6 +25,12 @@ router.get(
   assessmentController.getAssessmentById
 );
 
+router.get(
+  '/:id/chain',
+  authorize(ROLES.DEPARTMENT_ADMIN, ROLES.DIRECTOR, ROLES.CHAIRPERSON, ROLES.PO_OFFICE),
+  assessmentController.getAssessmentChain
+);
+
 // Department Admin creates a new assessment for a work proposal
 router.post(
   '/',
