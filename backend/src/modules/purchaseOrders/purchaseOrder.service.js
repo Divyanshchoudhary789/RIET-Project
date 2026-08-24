@@ -216,11 +216,19 @@ const markGoodsReceived = async (orderId, note, receivedByUser) => {
           for (const item of req.items || []) {
             await StockItem.findOneAndUpdate(
               { ownerType: 'campus', ownerRef: req.campusRef._id, itemName: item.name },
-              { $inc: { quantityAvailable: item.quantity }, $set: { updatedBy: receivedByUser._id } },
               {
-                upsert: true, new: true, session,
-                setOnInsert: { ownerModel: 'Campus', category: 'Received', unit: item.unit || 'units', quantityReserved: 0, reorderThreshold: 0 },
-              }
+                $inc: { quantityAvailable: item.quantity },
+                $set: { updatedBy: receivedByUser._id },
+                // Must live inside the update document (not the options bag) — Mongoose
+                // silently ignores a top-level `setOnInsert` option, which meant new
+                // stock items were created with category/unit missing entirely (they
+                // have no schema default, unlike quantityReserved/reorderThreshold).
+                // ownerModel is NOT set here — the schema's own pre('findOneAndUpdate')
+                // hook derives and $sets it on every write, and setting it in both
+                // places at once is a MongoDB conflict error.
+                $setOnInsert: { category: 'Received', unit: item.unit || 'units', quantityReserved: 0, reorderThreshold: 0 },
+              },
+              { upsert: true, new: true, session, runValidators: true }
             );
           }
         }
