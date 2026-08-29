@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Send } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Send, Eye } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatCurrency } from '../../utils/helpers';
+import DocumentDrawer from '../../components/DocumentDrawer';
 import '../../styles/pages.css';
 
 const NewNotesheet = () => {
@@ -20,6 +21,9 @@ const NewNotesheet = () => {
   const [loading, setLoading] = useState(false);
   const [fetchingAssessments, setFetchingAssessments] = useState(true);
   const [error, setError] = useState('');
+  const [viewAssessment, setViewAssessment] = useState(null);
+
+  const selectedAssessment = assessments.find((a) => a._id === assessmentRef) || null;
 
   useEffect(() => {
     const fetchForwardedAssessments = async () => {
@@ -147,19 +151,31 @@ const NewNotesheet = () => {
               No forwarded assessments available for notesheet creation.
             </div>
           ) : (
-            <select
-              className="form-input"
-              value={assessmentRef}
-              onChange={(e) => setAssessmentRef(e.target.value)}
-              required
-            >
-              <option value="">-- Select Assessment --</option>
-              {assessments.map((a) => (
-                <option key={a._id} value={a._id}>
-                  {a.referenceNumber || a._id?.slice(-8)} (Est: {formatCurrency(a.estimatedCost)}) - {a.workProposalRef?.title || 'Proposal'}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+              <select
+                className="form-input"
+                style={{ flex: 1 }}
+                value={assessmentRef}
+                onChange={(e) => setAssessmentRef(e.target.value)}
+                required
+              >
+                <option value="">-- Select Assessment --</option>
+                {assessments.map((a) => (
+                  <option key={a._id} value={a._id}>
+                    {a.referenceNumber || a._id?.slice(-8)} (Est: {formatCurrency(a.estimatedCost)}) - {a.workProposalRef?.title || 'Proposal'}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ whiteSpace: 'nowrap' }}
+                disabled={!selectedAssessment}
+                onClick={() => setViewAssessment(selectedAssessment)}
+              >
+                <Eye size={15} /> View
+              </button>
+            </div>
           )}
         </div>
 
@@ -277,6 +293,14 @@ const NewNotesheet = () => {
           </button>
         </div>
       </form>
+
+      {viewAssessment && (
+        <DocumentDrawer
+          doc={viewAssessment}
+          docType="Assessment"
+          onClose={() => setViewAssessment(null)}
+        />
+      )}
     </div>
   );
 };

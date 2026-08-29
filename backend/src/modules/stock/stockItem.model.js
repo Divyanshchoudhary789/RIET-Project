@@ -52,6 +52,16 @@ const stockItemSchema = new mongoose.Schema(
       default: null,
       // null is valid for headOffice stock which has no ownerRef
     },
+    /**
+     * For campus-held stock: which department's category this item belongs to.
+     * Set when the item is received into stock from a goods receipt, or chosen
+     * manually. Powers the Department Admin's "stock for my category" view.
+     */
+    relatedDepartmentRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Department',
+      default: null,
+    },
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -64,6 +74,7 @@ const stockItemSchema = new mongoose.Schema(
 );
 
 stockItemSchema.index({ ownerType: 1, ownerRef: 1 });
+stockItemSchema.index({ ownerType: 1, relatedDepartmentRef: 1 });
 stockItemSchema.index({ itemName: 'text', category: 'text' });
 
 // ownerModel must always agree with ownerType for the refPath populate on ownerRef to

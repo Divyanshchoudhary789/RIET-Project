@@ -4,7 +4,7 @@ const workProposalController = require('./workProposal.controller');
 const { authenticate } = require('../../middleware/authenticate');
 const { authorize, requirePasswordChange } = require('../../middleware/authorize');
 const { validate } = require('../../middleware/validate');
-const { createWorkProposalSchema, resubmitWorkProposalSchema, rejectSchema } = require('./workProposal.validation');
+const { createWorkProposalSchema, resubmitWorkProposalSchema } = require('./workProposal.validation');
 const { ROLES } = require('../../config/constants');
 
 router.use(authenticate, requirePasswordChange);
@@ -27,7 +27,7 @@ router.get(
   workProposalController.getWorkProposalChain
 );
 
-// Cluster Manager creates a new work proposal from requirements
+// Cluster Manager creates a new work proposal from requirement line items
 router.post(
   '/',
   authorize(ROLES.CLUSTER_MANAGER),
@@ -35,20 +35,12 @@ router.post(
   workProposalController.createWorkProposal
 );
 
-// Cluster Manager resubmits after Department Admin rejection
+// Cluster Manager resubmits a rejected proposal (legacy rejected rows only)
 router.patch(
   '/:id/resubmit',
   authorize(ROLES.CLUSTER_MANAGER),
   validate(resubmitWorkProposalSchema),
   workProposalController.resubmitWorkProposal
-);
-
-// Department Admin rejects back to Cluster Manager
-router.patch(
-  '/:id/reject',
-  authorize(ROLES.DEPARTMENT_ADMIN),
-  validate(rejectSchema),
-  workProposalController.rejectWorkProposal
 );
 
 module.exports = router;

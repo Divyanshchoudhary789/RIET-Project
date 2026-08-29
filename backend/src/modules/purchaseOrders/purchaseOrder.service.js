@@ -2,7 +2,10 @@ const mongoose = require('mongoose');
 const PurchaseOrder = require('./purchaseOrder.model');
 const Memo = require('../memos/memo.model');
 const Requirement = require('../requirements/requirement.model');
-const StockItem = require('../stock/stockItem.model');
+const WorkProposal = require('../proposals/workProposal.model');
+const Assessment = require('../assessments/assessment.model');
+const Notesheet = require('../notesheets/notesheet.model');
+const StockReceipt = require('../stock/stockReceipt.model');
 const { buildTimelineEntry } = require('../../utils/timeline');
 const { createNotification, notifyMany, emitDashboardRefresh } = require('../notifications/notification.service');
 const { generatePoNumber } = require('../../utils/generatePoNumber');
@@ -158,31 +161,66 @@ const populateGoodsReceiptChain = {
     path: 'notesheetRef',
     populate: {
       path: 'assessmentRef',
-      populate: {
-        path: 'workProposalRef',
-        populate: { path: 'requirementRefs', select: 'items campusRef', populate: { path: 'campusRef', select: '_id name code' } },
-      },
+      select: 'departmentRef items workProposalRef',
+      populate: [
+        { path: 'departmentRef', select: 'name code' },
+        {
+          path: 'workProposalRef',
+          populate: { path: 'requirementRefs', select: 'items campusRef', populate: { path: 'campusRef', select: '_id name code' } },
+        },
+      ],
     },
   },
 };
 
 /**
- * Marks a PO as received and, atomically within a single DB transaction, closes every
- * linked Requirement and increments campus stock. Wrapped in a transaction because a
- * crash partway through the per-requirement loop would otherwise leave the PO closed
- * with only some requirements/stock updated — a silent partial-fulfillment state.
+ * Returns true if every OTHER assessment branch on the work proposal has already
+ * had its purchase order received/closed (or has no PO path yet that matters).
+ * The branch identified by `currentAssessmentId` is treated as complete.
+ */
+const areSiblingBranchesComplete = async (workProposal, currentAssessmentId, session) => {
+  const assessmentIds = (workProposal?.assessmentRefs || []).map((a) => a.toString());
+  const others = assessmentIds.filter((id) => id !== currentAssessmentId?.toString());
+  if (others.length === 0) return true;
+
+  for (const aId of others) {
+    const a = await Assessment.findById(aId).select('notesheetRef status').session(session);
+    if (!a) continue;
+    // A branch still in review with no notesheet yet is definitely not complete.
+    if (!a.notesheetRef) return false;
+    const ns = await Notesheet.findById(a.notesheetRef).select('memoRef').session(session);
+    const memo = ns?.memoRef ? await Memo.findById(ns.memoRef).select('purchaseOrderRef').session(session) : null;
+    if (!memo?.purchaseOrderRef) return false;
+    const po = await PurchaseOrder.findById(memo.purchaseOrderRef).select('status').session(session);
+    if (!po || !['closed', 'received'].includes(po.status)) return false;
+  }
+  return true;
+};
+
+/**
+ * Marks a PO as received: closes linked Requirements once all branches are done
+ * and creates one pending StockReceipt per destination campus. Stock is NOT auto-incremented —
+ * each campus Center Head must enter the goods into stock themselves. Wrapped in
+ * a transaction so a mid-loop crash can't leave a half-fulfilled state.
  */
 const markGoodsReceived = async (orderId, note, receivedByUser) => {
   const receivedNote = note || 'Goods received at destination';
   const session = await mongoose.startSession();
   let order;
+  let createdReceipts = [];
 
   try {
     await session.withTransaction(async () => {
+      createdReceipts = [];
       order = await PurchaseOrder.findOneAndUpdate(
         { _id: orderId, status: 'pi_uploaded' },
         {
-          $set: { status: 'closed', receivedAt: new Date(), receivedBy: receivedByUser._id },
+          $set: {
+            status: 'closed',
+            receivedAt: new Date(),
+            receivedBy: receivedByUser._id,
+            stockEntryStatus: 'pending',
+          },
           $push: { timeline: buildTimelineEntry(receivedByUser, TIMELINE_ACTIONS.RECEIVED, receivedNote) },
         },
         { new: true, session }
@@ -205,33 +243,91 @@ const markGoodsReceived = async (orderId, note, receivedByUser) => {
         throw error;
       }
 
-      const requirements = order.memoRef?.notesheetRef?.assessmentRef?.workProposalRef?.requirementRefs || [];
-      for (const req of requirements) {
-        await Requirement.findByIdAndUpdate(req._id, {
-          $set: { status: DOCUMENT_STATUS.CLOSED },
-          $push: { timeline: buildTimelineEntry(receivedByUser, TIMELINE_ACTIONS.CLOSED, 'Goods received — requirement fulfilled') },
-        }, { session });
+      const assessment = order.memoRef?.notesheetRef?.assessmentRef;
+      const departmentRef = assessment?.departmentRef?._id || assessment?.departmentRef || null;
+      const departmentName = assessment?.departmentRef?.name || 'Received';
+      const workProposal = assessment?.workProposalRef;
+      const requirements = workProposal?.requirementRefs || [];
+      const reqById = new Map(requirements.map((r) => [r._id.toString(), r]));
+      // The items actually procured are the assessment's own (possibly edited) snapshot.
+      const assessmentItems = assessment?.items || [];
 
-        if (req.campusRef?._id) {
+      // Close linked requirements — but only once every fan-out branch of the
+      // proposal has had its goods received (otherwise a multi-department
+      // requirement would show "Closed" while another department is still procuring).
+      const siblingsComplete = await areSiblingBranchesComplete(workProposal, assessment?._id, session);
+      if (siblingsComplete) {
+        for (const req of requirements) {
+          await Requirement.findByIdAndUpdate(req._id, {
+            $set: { status: DOCUMENT_STATUS.CLOSED },
+            $push: { timeline: buildTimelineEntry(receivedByUser, TIMELINE_ACTIONS.CLOSED, 'Goods received — requirement fulfilled') },
+          }, { session });
+        }
+        if (workProposal?._id) {
+          await WorkProposal.updateOne(
+            { _id: workProposal._id },
+            { $set: { status: DOCUMENT_STATUS.CLOSED } },
+            { session }
+          );
+        }
+      }
+
+      // Group the procured items by their originating campus.
+      const byCampus = new Map();
+      const pushItem = (campusId, item) => {
+        if (!campusId) return;
+        const key = campusId.toString();
+        if (!byCampus.has(key)) byCampus.set(key, { campusRef: campusId, items: [] });
+        byCampus.get(key).items.push(item);
+      };
+
+      if (assessmentItems.length) {
+        for (const ai of assessmentItems) {
+          const srcReq = ai.sourceRequirementRef ? reqById.get(ai.sourceRequirementRef.toString()) : null;
+          const campusId = srcReq?.campusRef?._id || requirements[0]?.campusRef?._id;
+          pushItem(campusId, {
+            sourceItemId: ai.sourceItemId || null,
+            name: ai.name,
+            quantity: ai.quantity,
+            unit: ai.unit || 'units',
+            price: ai.price ?? 0,
+            category: departmentName,
+          });
+        }
+      } else {
+        // Legacy assessments with no snapshot — fall back to the requirement items.
+        for (const req of requirements) {
           for (const item of req.items || []) {
-            await StockItem.findOneAndUpdate(
-              { ownerType: 'campus', ownerRef: req.campusRef._id, itemName: item.name },
-              {
-                $inc: { quantityAvailable: item.quantity },
-                $set: { updatedBy: receivedByUser._id },
-                // Must live inside the update document (not the options bag) — Mongoose
-                // silently ignores a top-level `setOnInsert` option, which meant new
-                // stock items were created with category/unit missing entirely (they
-                // have no schema default, unlike quantityReserved/reorderThreshold).
-                // ownerModel is NOT set here — the schema's own pre('findOneAndUpdate')
-                // hook derives and $sets it on every write, and setting it in both
-                // places at once is a MongoDB conflict error.
-                $setOnInsert: { category: 'Received', unit: item.unit || 'units', quantityReserved: 0, reorderThreshold: 0 },
-              },
-              { upsert: true, new: true, session, runValidators: true }
-            );
+            pushItem(req.campusRef?._id, {
+              sourceItemId: item._id || null,
+              name: item.name,
+              quantity: item.quantity,
+              unit: item.unit || 'units',
+              price: item.price ?? 0,
+              category: departmentName,
+            });
           }
         }
+      }
+
+      for (const { campusRef, items } of byCampus.values()) {
+        if (!items.length) continue;
+        // Idempotent: a re-run (shouldn't happen — status guard above) upserts.
+        const receipt = await StockReceipt.findOneAndUpdate(
+          { purchaseOrderRef: order._id, campusRef },
+          {
+            $setOnInsert: {
+              purchaseOrderRef: order._id,
+              campusRef,
+              departmentRef,
+              items,
+              status: 'pending',
+              createdBy: receivedByUser._id,
+            },
+          },
+          { upsert: true, new: true, session }
+        );
+        createdReceipts.push(receipt);
       }
     });
   } finally {
@@ -239,14 +335,12 @@ const markGoodsReceived = async (orderId, note, receivedByUser) => {
   }
 
   // Notifications are best-effort and happen outside the transaction.
-  const requirements = order.memoRef?.notesheetRef?.assessmentRef?.workProposalRef?.requirementRefs || [];
-  const campusIds = [...new Set(requirements.map((r) => r.campusRef?._id?.toString()).filter(Boolean))];
-  for (const campusId of campusIds) {
-    const centerHeads = await User.find({ role: ROLES.CENTER_HEAD, scopeRef: campusId, isActive: true });
+  for (const receipt of createdReceipts) {
+    const centerHeads = await User.find({ role: ROLES.CENTER_HEAD, scopeRef: receipt.campusRef, isActive: true });
     await notifyMany(centerHeads, {
-      type: 'goods_received',
-      title: 'Goods Received',
-      message: 'Your requirement has been fulfilled. Goods have been received and stock has been updated.',
+      type: 'goods_received_pending_stock',
+      title: 'Goods Received — Add to Stock',
+      message: `Goods for ${order.poNumber} have been received. Please add the items into your campus stock.`,
       documentType: 'PurchaseOrder',
       documentId: order._id,
       actionType: 'Received',
@@ -258,6 +352,7 @@ const markGoodsReceived = async (orderId, note, receivedByUser) => {
     'purchaseOrder',
     { action: 'goods_received', id: order._id }
   );
+  emitDashboardRefresh(ROLES.CENTER_HEAD, 'stockReceipt', { action: 'created', id: order._id });
 
   return order;
 };

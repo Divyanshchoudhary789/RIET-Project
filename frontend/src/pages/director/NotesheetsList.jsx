@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Eye, Plus, XCircle, X } from 'lucide-react';
+import { Search, Eye, Plus } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass } from '../../utils/helpers';
 import DocumentDetail from '../../components/DocumentDetail';
@@ -18,12 +18,6 @@ const NotesheetsList = () => {
   const [total, setTotal]     = useState(0);
   const limit = 15;
   const [selected, setSelected] = useState(null);
-
-  const [rejectTarget, setRejectTarget]   = useState(null);
-  const [rejectNote, setRejectNote]       = useState('');
-  const [rejectLoading, setRejectLoading] = useState(false);
-  const [rejectError, setRejectError]     = useState('');
-
   const [actionLoading, setActionLoading] = useState({});
 
   const fetch = useCallback(async () => {
@@ -56,20 +50,6 @@ const NotesheetsList = () => {
       navigate('/director/memos/new', { state: { notesheetId: notesheet._id } });
     } finally {
       setActionLoading((p) => ({ ...p, [`memo_${notesheet._id}`]: false }));
-    }
-  };
-
-  const handleReject = async () => {
-    if (!rejectNote.trim()) { setRejectError('A rejection note is required.'); return; }
-    setRejectLoading(true);
-    try {
-      await api.patch(`/api/notesheets/${rejectTarget._id}/reject`, { note: rejectNote.trim() });
-      setRejectTarget(null);
-      fetch();
-    } catch (err) {
-      setRejectError(getErrorMessage(err));
-    } finally {
-      setRejectLoading(false);
     }
   };
 
@@ -129,19 +109,14 @@ const NotesheetsList = () => {
                       <button className="action-btn action-view" onClick={() => setSelected(n)}>
                         <Eye size={13} /> View
                       </button>
-                      {n.status === 'submitted' && (
-                        <>
-                          <button
-                            className="action-btn action-create"
-                            onClick={() => handleCreateMemo(n)}
-                            disabled={actionLoading[`memo_${n._id}`]}
-                          >
-                            <Plus size={13} /> Create Memo
-                          </button>
-                          <button className="action-btn action-reject" onClick={() => { setRejectTarget(n); setRejectNote(''); setRejectError(''); }}>
-                            <XCircle size={13} /> Reject
-                          </button>
-                        </>
+                      {(n.status === 'submitted' || n.status === 'revised') && (
+                        <button
+                          className="action-btn action-create"
+                          onClick={() => handleCreateMemo(n)}
+                          disabled={actionLoading[`memo_${n._id}`]}
+                        >
+                          <Plus size={13} /> Create Memo
+                        </button>
                       )}
                     </div>
                   </td>
@@ -161,31 +136,6 @@ const NotesheetsList = () => {
       </div>
 
       <DocumentDetail open={!!selected} onClose={() => setSelected(null)} title="Notesheet Detail" document={selected} docType="notesheet" />
-
-      {rejectTarget && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <h2 className="modal-title">Reject Notesheet</h2>
-              <button className="modal-close" onClick={() => setRejectTarget(null)}><X size={18} /></button>
-            </div>
-            <div className="reject-modal-body">
-              <p className="reject-modal-note">Provide a reason for rejecting this notesheet.</p>
-              {rejectError && <div className="alert alert-error">{rejectError}</div>}
-              <div className="form-field">
-                <label className="form-label required">Rejection Note</label>
-                <textarea className="form-textarea" rows={3} placeholder="Enter rejection reason…" value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} autoFocus />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setRejectTarget(null)}>Cancel</button>
-              <button className="btn btn-danger" onClick={handleReject} disabled={rejectLoading}>
-                {rejectLoading ? <><span className="spinner spinner-sm" /> Rejecting…</> : 'Reject'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

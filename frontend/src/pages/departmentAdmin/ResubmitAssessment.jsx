@@ -5,8 +5,6 @@ import api from '../../utils/api';
 import { getErrorMessage } from '../../utils/helpers';
 import '../../styles/pages.css';
 
-const RECOMMENDED_ACTIONS = ['approve', 'reject', 'defer', 'partial_approve'];
-
 const ResubmitAssessment = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -18,7 +16,6 @@ const ResubmitAssessment = () => {
     feasibilityNotes: '',
     estimatedCost: '',
     technicalRemarks: '',
-    recommendedAction: 'approve',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
@@ -33,7 +30,6 @@ const ResubmitAssessment = () => {
           feasibilityNotes: a.feasibilityNotes || '',
           estimatedCost: a.estimatedCost?.toString() || '',
           technicalRemarks: a.technicalRemarks || '',
-          recommendedAction: a.recommendedAction || 'approve',
         });
       } catch (err) {
         setError(getErrorMessage(err));
@@ -56,7 +52,6 @@ const ResubmitAssessment = () => {
         feasibilityNotes: form.feasibilityNotes.trim(),
         estimatedCost: Number(form.estimatedCost),
         technicalRemarks: form.technicalRemarks.trim() || undefined,
-        recommendedAction: form.recommendedAction,
       });
       navigate('/department-admin/assessments');
     } catch (err) {
@@ -94,19 +89,9 @@ const ResubmitAssessment = () => {
         <div className="form-card">
           <p className="form-section-title">Update Assessment</p>
           <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-            <div className="form-grid">
-              <div className="form-field">
-                <label className="form-label required">Estimated Cost (₹)</label>
-                <input className="form-input" type="number" min="0" value={form.estimatedCost} onChange={(e) => set('estimatedCost', e.target.value)} />
-              </div>
-              <div className="form-field">
-                <label className="form-label required">Recommended Action</label>
-                <select className="form-select" value={form.recommendedAction} onChange={(e) => set('recommendedAction', e.target.value)}>
-                  {RECOMMENDED_ACTIONS.map((a) => (
-                    <option key={a} value={a}>{a.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="form-field">
+              <label className="form-label required">Estimated Cost (₹)</label>
+              <input className="form-input" type="number" min="0" value={form.estimatedCost} onChange={(e) => set('estimatedCost', e.target.value)} />
             </div>
 
             <div className="form-field">

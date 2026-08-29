@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Plus, Trash2, Send } from 'lucide-react';
 import api from '../../utils/api';
-import { getErrorMessage } from '../../utils/helpers';
+import { getErrorMessage, formatCurrency } from '../../utils/helpers';
 import '../../styles/pages.css';
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
-const makeItem = () => ({ _key: crypto.randomUUID(), name: '', quantity: 1, unit: '', description: '' });
+const makeItem = () => ({ _key: crypto.randomUUID(), name: '', quantity: 1, unit: '', price: '', description: '' });
+const lineTotal = (it) => (Number(it.quantity) || 0) * (Number(it.price) || 0);
 
 const ResubmitRequirement = () => {
   const { id } = useParams();
@@ -14,7 +15,7 @@ const ResubmitRequirement = () => {
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState('medium');
-  const [justification, setJustification] = useState('');
+  const [description, setDescription] = useState('');
   const [items, setItems] = useState([makeItem()]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -25,8 +26,17 @@ const ResubmitRequirement = () => {
         const req = r.data.data;
         setTitle(req.title || '');
         setPriority(req.priority || 'medium');
-        setJustification(req.justification || '');
-        setItems(req.items?.map((it) => ({ ...it, _key: crypto.randomUUID() })) || [makeItem()]);
+        setDescription(req.description || req.justification || '');
+        setItems(
+          req.items?.map((it) => ({
+            _key: crypto.randomUUID(),
+            name: it.name || '',
+            quantity: it.quantity ?? 1,
+            unit: it.unit || '',
+            price: it.price ?? '',
+            description: it.description || '',
+          })) || [makeItem()]
+        );
       })
       .catch((e) => setError(getErrorMessage(e)))
       .finally(() => setLoading(false));
@@ -35,19 +45,22 @@ const ResubmitRequirement = () => {
   const updateItem = (key, field, val) =>
     setItems((p) => p.map((it) => it._key === key ? { ...it, [field]: val } : it));
 
+  const grandTotal = items.reduce((acc, it) => acc + lineTotal(it), 0);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim() || title.trim().length < 3) { setError('Title must be at least 3 characters.'); return; }
-    if (!justification.trim() || justification.length < 10) { setError('Justification must be at least 10 characters.'); return; }
+    if (!description.trim() || description.length < 10) { setError('Description must be at least 10 characters.'); return; }
     for (const it of items) {
       if (!it.name.trim() || !it.unit.trim()) { setError('Each item needs a name and unit.'); return; }
+      if (it.price === '' || isNaN(Number(it.price)) || Number(it.price) < 0) { setError('Each item must have a valid price.'); return; }
     }
     setError(''); setSubmitting(true);
     try {
       await api.patch(`/api/requirements/${id}/resubmit`, {
-        title: title.trim(), priority, justification: justification.trim(),
-        items: items.map(({ name, quantity, unit, description }) => ({
-          name: name.trim(), quantity: Number(quantity), unit: unit.trim(), description: description.trim(),
+        title: title.trim(), priority, description: description.trim(),
+        items: items.map(({ name, quantity, unit, price, description: d }) => ({
+          name: name.trim(), quantity: Number(quantity), unit: unit.trim(), price: Number(price), description: d.trim(),
         })),
       });
       navigate('/center-head/requirements');
@@ -66,7 +79,7 @@ const ResubmitRequirement = () => {
         <div className="page-heading">
           <span className="page-eyebrow">Revise</span>
           <h1 className="page-title">Resubmit Requirement</h1>
-          <p className="page-subtitle">Update and resubmit after rejection</p>
+          <p className="page-subtitle">Update and resubmit</p>
         </div>
         <button className="btn btn-ghost" onClick={() => navigate('/center-head/requirements')}>Cancel</button>
       </div>
@@ -95,9 +108,9 @@ const ResubmitRequirement = () => {
               </div>
             </div>
             <div className="form-field">
-              <label className="form-label required">Justification</label>
-              <textarea className="form-textarea" rows={4} value={justification}
-                onChange={(e) => setJustification(e.target.value)} />
+              <label className="form-label required">Description</label>
+              <textarea className="form-textarea" rows={4} value={description}
+                onChange={(e) => setDescription(e.target.value)} />
             </div>
           </div>
         </div>
@@ -109,21 +122,38 @@ const ResubmitRequirement = () => {
               <Plus size={15} /> Add
             </button>
           </div>
+          <div className="item-row-header" style={{ gridTemplateColumns: '1fr 70px 90px 110px 110px 36px' }}>
+            <span className="item-header-label">Item Name</span>
+            <span className="item-header-label">Qty</span>
+            <span className="item-header-label">Unit</span>
+            <span className="item-header-label">Unit Price (₹)</span>
+            <span className="item-header-label">Line Total</span>
+            <span />
+          </div>
           <div className="items-list">
             {items.map((it) => (
-              <div key={it._key} className="item-row">
+              <div key={it._key} className="item-row" style={{ gridTemplateColumns: '1fr 70px 90px 110px 110px 36px' }}>
                 <input className="form-input" value={it.name}
                   onChange={(e) => updateItem(it._key, 'name', e.target.value)} placeholder="Item name" />
                 <input className="form-input" type="number" min={1} value={it.quantity}
                   onChange={(e) => updateItem(it._key, 'quantity', e.target.value)} />
                 <input className="form-input" value={it.unit}
                   onChange={(e) => updateItem(it._key, 'unit', e.target.value)} placeholder="Unit" />
+                <input className="form-input" type="number" min={0} step="0.01" value={it.price}
+                  onChange={(e) => updateItem(it._key, 'price', e.target.value)} placeholder="0" />
+                <span style={{ display: 'flex', alignItems: 'center', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                  {formatCurrency(lineTotal(it))}
+                </span>
                 <button type="button" className="del-item-btn" onClick={() => setItems((p) => p.filter((x) => x._key !== it._key))}
                   disabled={items.length === 1}>
                   <Trash2 size={15} />
                 </button>
               </div>
             ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '12px 4px 0', borderTop: '1px solid var(--color-border)', marginTop: 12 }}>
+            <span style={{ fontSize: 13, color: 'var(--color-text-muted)', fontWeight: 600 }}>Estimated Total</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-accent)' }}>{formatCurrency(grandTotal)}</span>
           </div>
         </div>
 

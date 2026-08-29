@@ -7,8 +7,8 @@ const { validate } = require('../../middleware/validate');
 const {
   createAssessmentSchema,
   resubmitAssessmentSchema,
-  rejectSchema,
 } = require('./assessment.validation');
+const { actionNoteSchema } = require('../shared/actionNote.validation');
 const { ROLES } = require('../../config/constants');
 
 router.use(authenticate, requirePasswordChange);
@@ -39,7 +39,7 @@ router.post(
   assessmentController.createAssessment
 );
 
-// Department Admin resubmits after Director rejection
+// Department Admin resubmits after a legacy rejection
 router.patch(
   '/:id/resubmit',
   authorize(ROLES.DEPARTMENT_ADMIN),
@@ -47,19 +47,12 @@ router.patch(
   assessmentController.resubmitAssessment
 );
 
-// Director forwards assessment to PO Office
+// Director forwards assessment to PO Office (optional note)
 router.patch(
   '/:id/forward',
   authorize(ROLES.DIRECTOR),
+  validate(actionNoteSchema),
   assessmentController.forwardAssessmentToPO
-);
-
-// Director rejects assessment back to Department Admin
-router.patch(
-  '/:id/reject',
-  authorize(ROLES.DIRECTOR),
-  validate(rejectSchema),
-  assessmentController.rejectAssessment
 );
 
 module.exports = router;

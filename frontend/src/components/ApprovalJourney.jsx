@@ -226,57 +226,46 @@ const Step = ({ stage, label, status, pending, actor, date, children, isLast, is
   );
 };
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Step builders ────────────────────────────────────────────────────────────
 
-const ApprovalJourney = ({ chain, requirementTimeline = [] }) => {
-  const {
-    workProposal   = null,
-    assessment     = null,
-    notesheet      = null,
-    memo           = null,
-    purchaseOrder  = null,
-  } = chain || {};
+const buildHeadSteps = (workProposal, submittedEntry) => [
+  // ── 1. Requirement Submitted ──────────────────────────────────────────
+  {
+    key: 'requirement',
+    stage: 'requirement',
+    label: 'Requirement Submitted',
+    status: 'submitted',
+    pending: false,
+    actor: submittedEntry
+      ? `${submittedEntry.actorRole}${submittedEntry.actor?.name ? ` · ${submittedEntry.actor.name}` : ''}`
+      : 'Center Head',
+    date: submittedEntry?.timestamp,
+    content: null,
+  },
+  // ── 2. Work Proposal ──────────────────────────────────────────────────
+  {
+    key: 'workProposal',
+    stage: 'workProposal',
+    label: 'Work Proposal Created',
+    status: workProposal?.status || 'pending',
+    pending: !workProposal,
+    actor: workProposal?.createdBy?.name
+      ? `Cluster Manager · ${workProposal.createdBy.name}`
+      : workProposal ? 'Cluster Manager' : null,
+    date: workProposal?.createdAt,
+    content: workProposal?.title ? (
+      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+        {workProposal.title}
+      </div>
+    ) : null,
+  },
+];
 
-  // Step 1: pull submitted event from requirement's own timeline
-  const submittedEntry = requirementTimeline.find(e => e.action === 'Submitted');
-
-  // Step 7: goods received = PO in closed/received status
+const buildBranchSteps = ({ assessment, notesheet, memo, purchaseOrder }) => {
   const goodsReceived = purchaseOrder
     && (purchaseOrder.status === 'closed' || purchaseOrder.status === 'received');
 
-  const steps = [
-    // ── 1. Requirement Submitted ──────────────────────────────────────────
-    {
-      key: 'requirement',
-      stage: 'requirement',
-      label: 'Requirement Submitted',
-      status: 'submitted',
-      pending: false,
-      actor: submittedEntry
-        ? `${submittedEntry.actorRole}${submittedEntry.actor?.name ? ` · ${submittedEntry.actor.name}` : ''}`
-        : 'Center Head',
-      date: submittedEntry?.timestamp,
-      content: null,
-    },
-
-    // ── 2. Work Proposal ──────────────────────────────────────────────────
-    {
-      key: 'workProposal',
-      stage: 'workProposal',
-      label: 'Work Proposal Created',
-      status: workProposal?.status || 'pending',
-      pending: !workProposal,
-      actor: workProposal?.createdBy?.name
-        ? `Cluster Manager · ${workProposal.createdBy.name}`
-        : workProposal ? 'Cluster Manager' : null,
-      date: workProposal?.createdAt,
-      content: workProposal?.title ? (
-        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-          {workProposal.title}
-        </div>
-      ) : null,
-    },
-
+  return [
     // ── 3. Department Assessment ──────────────────────────────────────────
     {
       key: 'assessment',
@@ -454,11 +443,11 @@ const ApprovalJourney = ({ chain, requirementTimeline = [] }) => {
       ) : null,
     },
 
-    // ── 7. Goods Received — Stock Updated ────────────────────────────────
+    // ── 7. Goods Received — Stock Entry ──────────────────────────────────
     {
       key: 'goodsReceived',
       stage: 'goodsReceived',
-      label: 'Goods Received — Stock Updated',
+      label: 'Goods Received',
       status: goodsReceived ? 'received' : 'pending',
       pending: !goodsReceived,
       isComplete: goodsReceived,
@@ -476,7 +465,9 @@ const ApprovalJourney = ({ chain, requirementTimeline = [] }) => {
             display: 'flex', alignItems: 'center', gap: 6,
           }}>
             <PackageCheck size={14} color="#16a34a" />
-            Goods received &amp; stock incremented at campus
+            {purchaseOrder.stockEntryStatus === 'completed'
+              ? 'Goods received & entered into campus stock'
+              : 'Goods received — awaiting campus stock entry'}
           </div>
           {purchaseOrder.timeline?.find(e =>
             (e.action || '').toLowerCase().includes('received')
@@ -493,23 +484,63 @@ const ApprovalJourney = ({ chain, requirementTimeline = [] }) => {
       ) : null,
     },
   ];
+};
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+const renderSteps = (steps, keyPrefix = '') =>
+  steps.map((step, idx) => (
+    <Step
+      key={`${keyPrefix}${step.key}`}
+      stage={step.stage}
+      label={step.label}
+      status={step.status}
+      pending={step.pending}
+      actor={step.actor}
+      date={step.date}
+      isLast={idx === steps.length - 1}
+      isComplete={!!step.isComplete}
+    >
+      {step.content}
+    </Step>
+  ));
+
+const ApprovalJourney = ({ chain, requirementTimeline = [] }) => {
+  const { workProposal = null } = chain || {};
+  const submittedEntry = requirementTimeline.find(e => e.action === 'Submitted');
+
+  // Prefer the fan-out branches; fall back to the legacy single-branch fields.
+  const branches = Array.isArray(chain?.branches) && chain.branches.length > 0
+    ? chain.branches
+    : [{
+        department: chain?.assessment?.departmentRef || null,
+        assessment: chain?.assessment || null,
+        notesheet: chain?.notesheet || null,
+        memo: chain?.memo || null,
+        purchaseOrder: chain?.purchaseOrder || null,
+      }];
+
+  const headSteps = buildHeadSteps(workProposal, submittedEntry);
+
+  if (branches.length <= 1) {
+    const allSteps = [...headSteps, ...buildBranchSteps(branches[0])];
+    return <div style={{ paddingTop: 4 }}>{renderSteps(allSteps)}</div>;
+  }
 
   return (
     <div style={{ paddingTop: 4 }}>
-      {steps.map((step, idx) => (
-        <Step
-          key={step.key}
-          stage={step.stage}
-          label={step.label}
-          status={step.status}
-          pending={step.pending}
-          actor={step.actor}
-          date={step.date}
-          isLast={idx === steps.length - 1}
-          isComplete={!!step.isComplete}
-        >
-          {step.content}
-        </Step>
+      {renderSteps(headSteps)}
+      {branches.map((branch, i) => (
+        <div key={branch.assessment?._id || i} style={{ marginTop: 8 }}>
+          <div style={{
+            fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)',
+            padding: '6px 0 8px', marginTop: 8,
+            borderTop: '1px dashed var(--color-border)',
+          }}>
+            {branch.department?.name ? `${branch.department.name} Department` : `Department Branch ${i + 1}`}
+          </div>
+          {renderSteps(buildBranchSteps(branch), `b${i}-`)}
+        </div>
       ))}
     </div>
   );

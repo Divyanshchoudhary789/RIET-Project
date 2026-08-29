@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, RefreshCw, FilePlus2, X } from 'lucide-react';
 import api from '../../utils/api';
-import { formatDate, getErrorMessage, getStatusClass, getPriorityClass } from '../../utils/helpers';
+import { formatDate, formatCurrency, getErrorMessage, getStatusClass, getPriorityClass } from '../../utils/helpers';
 import ApprovalJourney from '../../components/ApprovalJourney';
 import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
@@ -123,7 +123,8 @@ const RequirementsList = () => {
   const filtered = items.filter(
     (it) =>
       !search ||
-      it.justification?.toLowerCase().includes(search.toLowerCase()) ||
+      (it.description || it.justification)?.toLowerCase().includes(search.toLowerCase()) ||
+      it.title?.toLowerCase().includes(search.toLowerCase()) ||
       it.priority?.includes(search)
   );
 
@@ -187,8 +188,8 @@ const RequirementsList = () => {
               <tbody>
                 {filtered.map((r) => (
                   <tr key={r._id}>
-                    <td style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.title || r.justification}>
-                      {r.title || r.justification || '—'}
+                    <td style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.title || r.description || r.justification}>
+                      {r.title || r.description || r.justification || '—'}
                     </td>
                     <td>{r.items?.length ?? 0}</td>
                     <td><span className={`badge ${getPriorityClass(r.priority)}`}>{r.priority}</span></td>
@@ -273,12 +274,12 @@ const RequirementsList = () => {
                 </div>
               )}
 
-              {/* Justification */}
-              {selected.justification && (
+              {/* Description */}
+              {(selected.description || selected.justification) && (
                 <div style={{ marginBottom: 16 }}>
-                  <div className="drawer-section-title">Justification</div>
+                  <div className="drawer-section-title">Description</div>
                   <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.6, margin: 0 }}>
-                    {selected.justification}
+                    {selected.description || selected.justification}
                   </p>
                 </div>
               )}
@@ -289,7 +290,7 @@ const RequirementsList = () => {
                   <div className="drawer-section-title">Items ({selected.items.length})</div>
                   <table className="table" style={{ marginTop: 8 }}>
                     <thead>
-                      <tr><th>Item</th><th>Qty</th><th>Unit</th></tr>
+                      <tr><th>Item</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Line Total</th></tr>
                     </thead>
                     <tbody>
                       {selected.items.map((item, i) => (
@@ -297,9 +298,19 @@ const RequirementsList = () => {
                           <td style={{ fontWeight: 500 }}>{item.name}</td>
                           <td>{item.quantity}</td>
                           <td>{item.unit || '—'}</td>
+                          <td>{formatCurrency(item.price || 0)}</td>
+                          <td style={{ fontWeight: 600 }}>{formatCurrency((item.quantity || 0) * (item.price || 0))}</td>
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr>
+                        <td colSpan={4} style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-text-muted)' }}>Estimated Total</td>
+                        <td style={{ fontWeight: 700, color: 'var(--color-accent)' }}>
+                          {formatCurrency(selected.items.reduce((a, it) => a + (it.quantity || 0) * (it.price || 0), 0))}
+                        </td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               )}

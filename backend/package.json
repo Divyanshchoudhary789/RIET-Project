@@ -7,6 +7,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node src/seed/seed.js",
+    "migrate": "node src/seed/migrations/run.js",
     "lint": "eslint src/**/*.js"
   },
   "keywords": [],

@@ -41,17 +41,8 @@ const resubmitAssessment = async (req, res, next) => {
 
 const forwardAssessmentToPO = async (req, res, next) => {
   try {
-    const assessment = await assessmentService.forwardAssessmentToPO(req.params.id, req.user);
+    const assessment = await assessmentService.forwardAssessmentToPO(req.params.id, req.body.note, req.user);
     return sendSuccess(res, 200, 'Assessment forwarded to PO Office.', assessment);
-  } catch (err) {
-    next(err);
-  }
-};
-
-const rejectAssessment = async (req, res, next) => {
-  try {
-    const assessment = await assessmentService.rejectAssessment(req.params.id, req.body.note, req.user);
-    return sendSuccess(res, 200, 'Assessment rejected.', assessment);
   } catch (err) {
     next(err);
   }
@@ -73,6 +64,5 @@ module.exports = {
   createAssessment,
   resubmitAssessment,
   forwardAssessmentToPO,
-  rejectAssessment,
   getAssessmentChain,
 };

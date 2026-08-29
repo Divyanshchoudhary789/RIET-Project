@@ -7,7 +7,6 @@ const { validate } = require('../../middleware/validate');
 const {
   createNotesheetSchema,
   resubmitNotesheetSchema,
-  rejectSchema,
 } = require('./notesheet.validation');
 const { ROLES } = require('../../config/constants');
 
@@ -39,20 +38,12 @@ router.post(
   notesheetController.createNotesheet
 );
 
-// PO Office creates a revised notesheet after Director rejection
+// PO Office creates a revised notesheet (legacy rejected rows only)
 router.post(
   '/:id/resubmit',
   authorize(ROLES.PO_OFFICE),
   validate(resubmitNotesheetSchema),
   notesheetController.resubmitNotesheet
-);
-
-// Director rejects notesheet back to PO Office
-router.patch(
-  '/:id/reject',
-  authorize(ROLES.DIRECTOR),
-  validate(rejectSchema),
-  notesheetController.rejectNotesheet
 );
 
 module.exports = router;

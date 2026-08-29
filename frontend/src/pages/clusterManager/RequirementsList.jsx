@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Eye, XCircle, X, CheckSquare } from 'lucide-react';
+import { Search, Eye, CheckSquare } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass } from '../../utils/helpers';
 import DocumentDetail from '../../components/DocumentDetail';
@@ -19,15 +19,6 @@ const RequirementsList = () => {
   const limit = 15;
 
   const [selected, setSelected] = useState(null);
-
-  // Reject modal
-  const [rejectTarget, setRejectTarget] = useState(null);
-  const [rejectNote, setRejectNote]     = useState('');
-  const [rejectLoading, setRejectLoading] = useState(false);
-  const [rejectError, setRejectError]   = useState('');
-
-  // Action loading per row
-  const [actionLoading, setActionLoading] = useState({});
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -52,26 +43,6 @@ const RequirementsList = () => {
   useSocketEvent('dashboard:refresh', (payload) => {
     if (['requirement', 'workProposal'].includes(payload?.entity)) fetch();
   });
-
-  const openReject = (req) => {
-    setRejectTarget(req);
-    setRejectNote('');
-    setRejectError('');
-  };
-
-  const handleReject = async () => {
-    if (!rejectNote.trim()) { setRejectError('A note is required for rejection.'); return; }
-    setRejectLoading(true);
-    try {
-      await api.patch(`/api/requirements/${rejectTarget._id}/reject`, { note: rejectNote.trim() });
-      setRejectTarget(null);
-      fetch();
-    } catch (err) {
-      setRejectError(getErrorMessage(err));
-    } finally {
-      setRejectLoading(false);
-    }
-  };
 
   const totalPages = Math.ceil(total / limit) || 1;
 
@@ -143,17 +114,12 @@ const RequirementsList = () => {
                         <Eye size={13} /> View
                       </button>
                       {(req.status === 'submitted' || req.status === 'revised') && (
-                        <>
-                          <button
-                            className="action-btn action-forward"
-                            onClick={() => navigate('/cluster-manager/proposals/new', { state: { requirementIds: [req._id] } })}
-                          >
-                            <CheckSquare size={13} /> Propose
-                          </button>
-                          <button className="action-btn action-reject" onClick={() => openReject(req)}>
-                            <XCircle size={13} /> Reject
-                          </button>
-                        </>
+                        <button
+                          className="action-btn action-forward"
+                          onClick={() => navigate('/cluster-manager/proposals/new', { state: { requirementIds: [req._id] } })}
+                        >
+                          <CheckSquare size={13} /> Propose
+                        </button>
                       )}
                     </div>
                   </td>
@@ -173,34 +139,6 @@ const RequirementsList = () => {
       </div>
 
       <DocumentDetail open={!!selected} onClose={() => setSelected(null)} title="Requirement Detail" document={selected} docType="requirement" />
-
-      {/* Reject modal */}
-      {rejectTarget && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <h2 className="modal-title">Reject Requirement</h2>
-              <button className="modal-close" onClick={() => setRejectTarget(null)}><X size={18} /></button>
-            </div>
-            <div className="reject-modal-body">
-              <p className="reject-modal-note">
-                Rejecting <strong>{rejectTarget.referenceNumber || rejectTarget._id?.slice(-8)}</strong>. Please provide a reason.
-              </p>
-              {rejectError && <div className="alert alert-error">{rejectError}</div>}
-              <div className="form-field">
-                <label className="form-label required">Rejection Note</label>
-                <textarea className="form-textarea" rows={3} placeholder="Enter rejection reason…" value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} autoFocus />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setRejectTarget(null)}>Cancel</button>
-              <button className="btn btn-danger" onClick={handleReject} disabled={rejectLoading}>
-                {rejectLoading ? <><span className="spinner spinner-sm" /> Rejecting…</> : 'Reject'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

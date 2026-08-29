@@ -19,6 +19,12 @@ const requirementItemSchema = new mongoose.Schema(
       required: [true, 'Unit is required'],
       trim: true,
     },
+    price: {
+      type: Number,
+      required: [true, 'Price is required'],
+      min: [0, 'Price cannot be negative'],
+      default: 0,
+    },
     description: {
       type: String,
       trim: true,
@@ -58,11 +64,11 @@ const requirementSchema = new mongoose.Schema(
       enum: Object.values(PRIORITY_LEVELS),
       required: [true, 'Priority is required'],
     },
-    justification: {
+    description: {
       type: String,
-      required: [true, 'Justification is required'],
+      required: [true, 'Description is required'],
       trim: true,
-      maxlength: [2000, 'Justification must not exceed 2000 characters'],
+      maxlength: [2000, 'Description must not exceed 2000 characters'],
     },
     attachments: {
       type: [String],

@@ -39,15 +39,6 @@ const resubmitNotesheet = async (req, res, next) => {
   }
 };
 
-const rejectNotesheet = async (req, res, next) => {
-  try {
-    const notesheet = await notesheetService.rejectNotesheet(req.params.id, req.body.note, req.user);
-    return sendSuccess(res, 200, 'Notesheet rejected.', notesheet);
-  } catch (err) {
-    next(err);
-  }
-};
-
 const getNotesheetChain = async (req, res, next) => {
   try {
     const requirementId = await resolveRequirementIdFromNotesheet(req.params.id);
@@ -58,4 +49,4 @@ const getNotesheetChain = async (req, res, next) => {
   }
 };
 
-module.exports = { listNotesheets, getNotesheetById, createNotesheet, resubmitNotesheet, rejectNotesheet, getNotesheetChain };
+module.exports = { listNotesheets, getNotesheetById, createNotesheet, resubmitNotesheet, getNotesheetChain };

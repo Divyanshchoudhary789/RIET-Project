@@ -113,13 +113,15 @@ const DocumentDrawer = ({ doc, docType = 'Document', onClose, footer }) => {
     ? notesheet.quotations
     : (Array.isArray(activeDoc.quotations) ? activeDoc.quotations : []);
 
-  // Items
+  // Items — prefer the document's own (edited) snapshot; fall back to the
+  // originating requirements for deep-populated memos.
   let items = [];
-  if (requirementRefs.length > 0) {
-    items = requirementRefs.flatMap((r) => r.items || []);
-  } else if (Array.isArray(activeDoc.items)) {
+  if (Array.isArray(activeDoc.items) && activeDoc.items.length > 0) {
     items = activeDoc.items;
+  } else if (requirementRefs.length > 0) {
+    items = requirementRefs.flatMap((r) => r.items || []);
   }
+  const itemsTotal = items.reduce((a, it) => a + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0);
 
   // Recommended Vendor
   const recommendedVendor = activeDoc.recommendedVendor || notesheet?.recommendedVendor || '';
@@ -134,13 +136,19 @@ const DocumentDrawer = ({ doc, docType = 'Document', onClose, footer }) => {
   const notesheetRemarks = notesheet?.remarks;
 
   // Department & Campus
-  const departmentName = assessment?.departmentRef?.name || proposal?.departmentRefs?.[0]?.name || activeDoc.departmentRef?.name;
-  const campusName = requirementRefs[0]?.campusRef?.name || activeDoc.campusRef?.name;
+  const departmentName = assessment?.departmentRef?.name || proposal?.departmentRefs?.[0]?.name
+    || activeDoc.departmentRef?.name
+    || (Array.isArray(activeDoc.departmentRefs) ? activeDoc.departmentRefs.map((d) => d.name).filter(Boolean).join(', ') : '');
+  const campusName = requirementRefs[0]?.campusRef?.name || activeDoc.campusRef?.name
+    || (Array.isArray(activeDoc.campusRefs) ? activeDoc.campusRefs.map((c) => c.name).filter(Boolean).join(', ') : '');
 
   // Proposal title & justification
   const proposalTitle = proposal?.title || activeDoc.title;
   const proposalDescription = proposal?.description || activeDoc.description;
-  const justificationText = requirementRefs[0]?.justification || activeDoc.justification;
+  const isRequirementDoc = docType.toLowerCase().includes('requirement');
+  const justificationText =
+    requirementRefs[0]?.description || requirementRefs[0]?.justification ||
+    (isRequirementDoc ? (activeDoc.description || activeDoc.justification) : activeDoc.justification);
 
   // Attachments
   const attachments = requirementRefs.flatMap((r) => r.attachments || []).concat(activeDoc.attachments || []);
@@ -367,8 +375,10 @@ const DocumentDrawer = ({ doc, docType = 'Document', onClose, footer }) => {
                     <tr>
                       <th style={{ padding: '10px 14px', width: 40 }}>#</th>
                       <th style={{ padding: '10px 14px' }}>Item Name</th>
-                      <th style={{ padding: '10px 14px' }}>Quantity</th>
+                      <th style={{ padding: '10px 14px' }}>Qty</th>
                       <th style={{ padding: '10px 14px' }}>Unit</th>
+                      <th style={{ padding: '10px 14px' }}>Unit Price</th>
+                      <th style={{ padding: '10px 14px' }}>Line Total</th>
                       <th style={{ padding: '10px 14px' }}>Description / Specifications</th>
                     </tr>
                   </thead>
@@ -379,10 +389,22 @@ const DocumentDrawer = ({ doc, docType = 'Document', onClose, footer }) => {
                         <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--color-text-primary)', wordBreak: 'break-word' }}>{item.name}</td>
                         <td style={{ padding: '10px 14px', fontWeight: 600 }}>{item.quantity}</td>
                         <td style={{ padding: '10px 14px' }}>{item.unit || '—'}</td>
+                        <td style={{ padding: '10px 14px' }}>{item.price != null ? formatCurrency(item.price) : '—'}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--color-accent)' }}>
+                          {formatCurrency((Number(item.quantity) || 0) * (Number(item.price) || 0))}
+                        </td>
                         <td style={{ padding: '10px 14px', color: 'var(--color-text-secondary)', wordBreak: 'break-word' }}>{item.description || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
+                  {itemsTotal > 0 && (
+                    <tfoot>
+                      <tr>
+                        <td colSpan={5} style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600, color: 'var(--color-text-muted)' }}>Estimated Total</td>
+                        <td colSpan={2} style={{ padding: '10px 14px', fontWeight: 700, color: 'var(--color-accent)' }}>{formatCurrency(itemsTotal)}</td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
             </div>
@@ -421,11 +443,11 @@ const DocumentDrawer = ({ doc, docType = 'Document', onClose, footer }) => {
             </div>
           )}
 
-          {/* Proposal & Justification */}
+          {/* Proposal & Description */}
           {(proposalTitle || justificationText) && (
             <div style={{ marginBottom: 24, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
               <div className="drawer-section-title" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-primary)', fontWeight: 600, marginBottom: 8 }}>
-                <FileSpreadsheet size={16} color="var(--color-accent)" /> Proposal & Justification
+                <FileSpreadsheet size={16} color="var(--color-accent)" /> Proposal &amp; Description
               </div>
               {proposalTitle && (
                 <div style={{ marginBottom: 8 }}>
@@ -435,7 +457,7 @@ const DocumentDrawer = ({ doc, docType = 'Document', onClose, footer }) => {
               )}
               {justificationText && (
                 <div style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 12 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Requirement Justification:</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Requirement Description:</span>
                   <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', margin: '2px 0 0 0', lineHeight: 1.5, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                     {justificationText}
                   </p>

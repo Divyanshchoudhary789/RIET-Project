@@ -43,11 +43,4 @@ const resubmitNotesheetSchema = Joi.object({
   remarks: Joi.string().trim().max(2000).optional().allow(''),
 });
 
-const rejectSchema = Joi.object({
-  note: Joi.string().trim().min(5).max(1000).required().messages({
-    'string.min': 'Rejection note must be at least 5 characters.',
-    'any.required': 'A rejection note is mandatory.',
-  }),
-});
-
-module.exports = { createNotesheetSchema, resubmitNotesheetSchema, rejectSchema };
+module.exports = { createNotesheetSchema, resubmitNotesheetSchema };

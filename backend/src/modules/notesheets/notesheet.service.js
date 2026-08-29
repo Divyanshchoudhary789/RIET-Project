@@ -2,10 +2,9 @@ const Notesheet = require('./notesheet.model');
 const Assessment = require('../assessments/assessment.model');
 const User = require('../users/user.model');
 const { buildTimelineEntry } = require('../../utils/timeline');
-const { createNotification, notifyMany, emitDashboardRefresh } = require('../notifications/notification.service');
+const { notifyMany, emitDashboardRefresh } = require('../notifications/notification.service');
 const { DOCUMENT_STATUS, TIMELINE_ACTIONS, ROLES } = require('../../config/constants');
 const { getPaginationParams, buildPaginationMeta } = require('../../utils/pagination');
-const { applyAtomicTransition, throwTransitionConflict } = require('../../utils/atomicTransition');
 
 const listNotesheets = async (user, query) => {
   const { page, limit, skip } = getPaginationParams(query);
@@ -134,47 +133,4 @@ const resubmitNotesheet = async (notesheetId, data, poUser) => {
   return newNotesheet;
 };
 
-const rejectNotesheet = async (notesheetId, note, director) => {
-  const notesheet = await applyAtomicTransition(
-    Notesheet,
-    notesheetId,
-    [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.REVISED],
-    {
-      $set: { status: DOCUMENT_STATUS.REJECTED },
-      $push: { timeline: buildTimelineEntry(director, TIMELINE_ACTIONS.REJECTED, note) },
-    },
-    { path: 'createdBy', select: 'name email' }
-  );
-
-  if (!notesheet) {
-    await throwTransitionConflict(
-      Notesheet,
-      notesheetId,
-      'Notesheet not found.',
-      'This notesheet is no longer pending review — it may have already been processed.'
-    );
-  }
-
-  await createNotification({
-    userId: notesheet.createdBy._id,
-    userEmail: notesheet.createdBy.email,
-    userName: notesheet.createdBy.name,
-    type: 'notesheet_rejected',
-    title: 'Notesheet Rejected',
-    message: `Your notesheet has been rejected by ${director.name}. Reason: ${note}`,
-    documentType: 'Notesheet',
-    documentId: notesheet._id,
-    actionType: 'Rejected',
-    note,
-  });
-
-  emitDashboardRefresh(
-    [ROLES.PO_OFFICE, ROLES.DIRECTOR],
-    'notesheet',
-    { action: 'rejected', id: notesheet._id }
-  );
-
-  return notesheet;
-};
-
-module.exports = { listNotesheets, getNotesheetById, createNotesheet, resubmitNotesheet, rejectNotesheet };
+module.exports = { listNotesheets, getNotesheetById, createNotesheet, resubmitNotesheet };

@@ -8,6 +8,10 @@ const requirementItemSchema = Joi.object({
     'any.required': 'Quantity is required.',
   }),
   unit: Joi.string().trim().required().messages({ 'any.required': 'Unit is required.' }),
+  price: Joi.number().min(0).required().messages({
+    'number.min': 'Price cannot be negative.',
+    'any.required': 'Price is required.',
+  }),
   description: Joi.string().trim().max(500).optional().allow(''),
 });
 
@@ -24,17 +28,10 @@ const createRequirementSchema = Joi.object({
     .valid(...Object.values(PRIORITY_LEVELS))
     .required()
     .messages({ 'any.required': 'Priority is required.' }),
-  justification: Joi.string().trim().min(10).max(2000).required().messages({
-    'string.min': 'Justification must be at least 10 characters.',
-    'any.required': 'Justification is required.',
+  description: Joi.string().trim().min(10).max(2000).required().messages({
+    'string.min': 'Description must be at least 10 characters.',
+    'any.required': 'Description is required.',
   }),
 });
 
-const rejectSchema = Joi.object({
-  note: Joi.string().trim().min(5).max(1000).required().messages({
-    'string.min': 'Rejection note must be at least 5 characters.',
-    'any.required': 'A rejection note is mandatory.',
-  }),
-});
-
-module.exports = { createRequirementSchema, rejectSchema };
+module.exports = { createRequirementSchema };

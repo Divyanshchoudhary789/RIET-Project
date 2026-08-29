@@ -2,6 +2,57 @@ const mongoose = require('mongoose');
 const timelineEntrySchema = require('../shared/timelineEntry.schema');
 const { DOCUMENT_STATUS } = require('../../config/constants');
 
+/**
+ * A snapshot line item. The Cluster Manager copies items out of the source
+ * requirement(s) into the proposal and may edit them freely — the original
+ * requirement is never mutated. Each line is assigned to exactly one department.
+ */
+const proposalItemSchema = new mongoose.Schema(
+  {
+    sourceRequirementRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Requirement',
+      required: [true, 'Source requirement reference is required'],
+    },
+    sourceItemId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    name: {
+      type: String,
+      required: [true, 'Item name is required'],
+      trim: true,
+    },
+    quantity: {
+      type: Number,
+      required: [true, 'Quantity is required'],
+      min: [1, 'Quantity must be at least 1'],
+    },
+    unit: {
+      type: String,
+      required: [true, 'Unit is required'],
+      trim: true,
+    },
+    price: {
+      type: Number,
+      required: [true, 'Price is required'],
+      min: [0, 'Price cannot be negative'],
+      default: 0,
+    },
+    description: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    departmentRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Department',
+      required: [true, 'Each item must be assigned to a department'],
+    },
+  },
+  { _id: true }
+);
+
 const workProposalSchema = new mongoose.Schema(
   {
     requirementRefs: {
@@ -16,6 +67,19 @@ const workProposalSchema = new mongoose.Schema(
       validate: {
         validator: (arr) => arr.length > 0,
         message: 'At least one department must be assigned',
+      },
+    },
+    // Denormalized distinct campuses of the source requirements — powers the
+    // Department Admin "filter by campus" view without extra joins.
+    campusRefs: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Campus' }],
+      default: [],
+    },
+    items: {
+      type: [proposalItemSchema],
+      validate: {
+        validator: (arr) => arr.length > 0,
+        message: 'At least one line item is required',
       },
     },
     createdBy: {
@@ -43,10 +107,10 @@ const workProposalSchema = new mongoose.Schema(
       type: [timelineEntrySchema],
       default: [],
     },
-    assessmentRef: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Assessment',
-      default: null,
+    // One assessment per assigned department (fan-out).
+    assessmentRefs: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Assessment' }],
+      default: [],
     },
   },
   {
@@ -57,6 +121,7 @@ const workProposalSchema = new mongoose.Schema(
 workProposalSchema.index({ status: 1, createdAt: -1 });
 workProposalSchema.index({ createdBy: 1 });
 workProposalSchema.index({ departmentRefs: 1, status: 1 });
+workProposalSchema.index({ campusRefs: 1 });
 
 // Human-readable reference derived from _id
 workProposalSchema.virtual('referenceNumber').get(function () {

@@ -215,6 +215,12 @@ const PurchaseOrderDetail = () => {
             <Field label="Issued Date" value={formatDate(po.createdAt)} />
             {po.receivedAt && <Field label="Received Date" value={formatDate(po.receivedAt)} />}
             {po.receivedBy?.name && <Field label="Received By" value={po.receivedBy.name} />}
+            {po.receivedAt && (
+              <Field
+                label="Campus Stock Entry"
+                value={po.stockEntryStatus === 'completed' ? 'Completed' : po.stockEntryStatus === 'pending' ? 'Pending — campus to add' : '—'}
+              />
+            )}
           </div>
 
           {/* Performa Invoice */}
@@ -405,7 +411,7 @@ const PurchaseOrderDetail = () => {
                 {receivingError && <div className="page-error" style={{ marginBottom: 16 }}>{receivingError}</div>}
                 <div className="alert alert-info" style={{ marginBottom: 16 }}>
                   <div>
-                    <strong>Stock Auto-Update:</strong> Marking this PO as received will automatically increment campus stock for all linked requirement items.
+                    <strong>Next step:</strong> Marking this PO as received closes the linked requirement(s) and notifies the destination campus to enter the goods into their stock. Stock is no longer updated automatically.
                   </div>
                 </div>
                 <div className="form-field">
@@ -423,7 +429,7 @@ const PurchaseOrderDetail = () => {
                 <button type="button" className="btn btn-ghost" onClick={() => setShowGoodsModal(false)} disabled={receiving}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={receiving}>
                   {receiving ? <span className="spinner spinner-sm" /> : <PackageCheck size={15} />}
-                  Confirm & Update Stock
+                  Confirm Goods Received
                 </button>
               </div>
             </form>

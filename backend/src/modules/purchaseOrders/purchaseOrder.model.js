@@ -54,13 +54,14 @@ const purchaseOrderSchema = new mongoose.Schema(
       default: null,
     },
     /**
-     * Tracks which stock items were incremented on goods receipt.
-     * Stored for audit purposes.
+     * After goods receipt the destination campus(es) must enter the items into
+     * stock themselves. 'not_required' is used for legacy POs whose stock was
+     * auto-incremented under the old flow.
      */
-    stockUpdateRef: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'StockItem',
-      default: null,
+    stockEntryStatus: {
+      type: String,
+      enum: ['not_required', 'pending', 'completed'],
+      default: 'not_required',
     },
     timeline: {
       type: [timelineEntrySchema],

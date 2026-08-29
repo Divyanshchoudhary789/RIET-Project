@@ -4,6 +4,7 @@ import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass } from '../../utils/helpers';
 import DocumentDrawer from '../../components/DocumentDrawer';
 import RejectModal from '../../components/RejectModal';
+import ActionNoteModal from '../../components/ActionNoteModal';
 import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
@@ -19,6 +20,7 @@ const MemosList = () => {
 
   const [selectedMemo, setSelectedMemo] = useState(null);
   const [rejectingMemoId, setRejectingMemoId] = useState(null);
+  const [approvingMemoId, setApprovingMemoId] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   const fetchMemos = useCallback(async () => {
@@ -47,10 +49,12 @@ const MemosList = () => {
     if (['memo', 'purchaseOrder'].includes(payload?.entity)) fetchMemos();
   });
 
-  const handleApproveMemo = async (memoId) => {
+  const handleApproveMemo = async (note) => {
+    if (!approvingMemoId) return;
     setActionLoading(true);
     try {
-      await api.patch(`/api/memos/${memoId}/decide`, { action: 'approve' });
+      await api.patch(`/api/memos/${approvingMemoId}/decide`, { action: 'approve', note: note || undefined });
+      setApprovingMemoId(null);
       setSelectedMemo(null);
       await fetchMemos();
     } catch (err) {
@@ -160,7 +164,7 @@ const MemosList = () => {
                               className="btn btn-primary"
                               style={{ padding: '4px 10px', fontSize: 12 }}
                               disabled={actionLoading}
-                              onClick={() => handleApproveMemo(m._id)}
+                              onClick={() => setApprovingMemoId(m._id)}
                             >
                               Approve
                             </button>
@@ -209,7 +213,7 @@ const MemosList = () => {
                 <button className="btn btn-danger" onClick={() => setRejectingMemoId(selectedMemo._id)} disabled={actionLoading}>
                   Reject Memo
                 </button>
-                <button className="btn btn-primary" onClick={() => handleApproveMemo(selectedMemo._id)} disabled={actionLoading}>
+                <button className="btn btn-primary" onClick={() => setApprovingMemoId(selectedMemo._id)} disabled={actionLoading}>
                   {actionLoading ? <span className="spinner spinner-sm" /> : null} Approve Memo
                 </button>
               </div>
@@ -224,6 +228,18 @@ const MemosList = () => {
           loading={actionLoading}
           onConfirm={handleRejectMemoConfirm}
           onClose={() => setRejectingMemoId(null)}
+        />
+      )}
+
+      {approvingMemoId && (
+        <ActionNoteModal
+          title="Approve Memo"
+          description="This memo will be approved and sent to Accounts to issue the Purchase Order. You can add an optional note."
+          confirmLabel="Approve Memo"
+          placeholder="Optional approval note…"
+          loading={actionLoading}
+          onConfirm={handleApproveMemo}
+          onClose={() => setApprovingMemoId(null)}
         />
       )}
     </div>

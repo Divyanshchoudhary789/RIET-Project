@@ -39,19 +39,6 @@ const resubmitWorkProposal = async (req, res, next) => {
   }
 };
 
-const rejectWorkProposal = async (req, res, next) => {
-  try {
-    const proposal = await workProposalService.rejectWorkProposal(
-      req.params.id,
-      req.body.note,
-      req.user
-    );
-    return sendSuccess(res, 200, 'Work proposal rejected.', proposal);
-  } catch (err) {
-    next(err);
-  }
-};
-
 const getWorkProposalChain = async (req, res, next) => {
   try {
     const requirementId = await resolveRequirementIdFromWorkProposal(req.params.id);
@@ -67,6 +54,5 @@ module.exports = {
   getWorkProposalById,
   createWorkProposal,
   resubmitWorkProposal,
-  rejectWorkProposal,
   getWorkProposalChain,
 };

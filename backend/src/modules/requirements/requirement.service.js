@@ -9,7 +9,6 @@ const { buildTimelineEntry } = require('../../utils/timeline');
 const { createNotification, emitDashboardRefresh } = require('../notifications/notification.service');
 const { DOCUMENT_STATUS, TIMELINE_ACTIONS, ROLES } = require('../../config/constants');
 const { getPaginationParams, buildPaginationMeta } = require('../../utils/pagination');
-const { applyAtomicTransition, throwTransitionConflict } = require('../../utils/atomicTransition');
 
 const buildFilter = async (user, query) => {
   const filter = {};
@@ -26,7 +25,7 @@ const buildFilter = async (user, query) => {
   if (query.priority) filter.priority = query.priority;
   if (query.search) {
     const regex = new RegExp(query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    filter.$or = [{ title: regex }, { justification: regex }];
+    filter.$or = [{ title: regex }, { description: regex }];
   }
   return filter;
 };
@@ -99,7 +98,7 @@ const createRequirement = async (data, user) => {
     title: data.title,
     items: data.items,
     priority: data.priority,
-    justification: data.justification,
+    description: data.description,
     attachments: data.attachments || [],
     status: DOCUMENT_STATUS.SUBMITTED,
     timeline: [buildTimelineEntry(user, TIMELINE_ACTIONS.SUBMITTED)],
@@ -126,50 +125,6 @@ const createRequirement = async (data, user) => {
   return requirement;
 };
 
-const rejectRequirement = async (requirementId, note, clusterManager) => {
-  const requirement = await applyAtomicTransition(
-    Requirement,
-    requirementId,
-    [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.REVISED],
-    {
-      $set: { status: DOCUMENT_STATUS.REJECTED },
-      $push: { timeline: buildTimelineEntry(clusterManager, TIMELINE_ACTIONS.REJECTED, note) },
-    },
-    { path: 'createdBy', select: 'name email' }
-  );
-
-  if (!requirement) {
-    await throwTransitionConflict(
-      Requirement,
-      requirementId,
-      'Requirement not found.',
-      'This requirement is no longer pending review — it may have already been processed.'
-    );
-  }
-
-  await createNotification({
-    userId: requirement.createdBy._id,
-    userEmail: requirement.createdBy.email,
-    userName: requirement.createdBy.name,
-    type: 'requirement_rejected',
-    title: 'Requirement Rejected',
-    message: `Your requirement has been rejected by ${clusterManager.name}. Reason: ${note}`,
-    documentType: 'Requirement',
-    documentId: requirement._id,
-    actionType: 'Rejected',
-    note,
-  });
-
-  // Refresh center_head and cluster_manager dashboards
-  emitDashboardRefresh(
-    [ROLES.CENTER_HEAD, ROLES.CLUSTER_MANAGER],
-    'requirement',
-    { action: 'rejected', id: requirement._id }
-  );
-
-  return requirement;
-};
-
 const resubmitRequirement = async (requirementId, data, user) => {
   const requirement = await Requirement.findById(requirementId);
   if (!requirement) {
@@ -191,7 +146,7 @@ const resubmitRequirement = async (requirementId, data, user) => {
   requirement.title = data.title || requirement.title;
   requirement.items = data.items || requirement.items;
   requirement.priority = data.priority || requirement.priority;
-  requirement.justification = data.justification || requirement.justification;
+  requirement.description = data.description || requirement.description;
   requirement.status = DOCUMENT_STATUS.REVISED;
   requirement.timeline.push(buildTimelineEntry(user, TIMELINE_ACTIONS.REVISED, data.note || ''));
   await requirement.save();
@@ -260,6 +215,9 @@ const getRequirementChain = async (requirementId, user) => {
   const chain = {
     requirement: { _id: requirement._id, status: requirement.status, timeline: requirement.timeline },
     workProposal: null,
+    branches: [],
+    // Legacy single-branch fields — kept populated with branches[0] for any
+    // caller / UI that has not yet been updated to read `branches`.
     assessment: null,
     notesheet: null,
     memo: null,
@@ -278,41 +236,74 @@ const getRequirementChain = async (requirementId, user) => {
     _id: workProposal._id,
     title: workProposal.title,
     status: workProposal.status,
+    items: workProposal.items || [],
     createdBy: workProposal.createdBy,
     createdAt: workProposal.createdAt,
     timeline: workProposal.timeline,
   };
 
-  if (!workProposal.assessmentRef) return chain;
+  // A proposal may fan out to one assessment per assigned department.
+  const assessmentIds = (workProposal.assessmentRefs && workProposal.assessmentRefs.length > 0)
+    ? workProposal.assessmentRefs
+    : (workProposal.assessmentRef ? [workProposal.assessmentRef] : []);
 
-  const assessment = await Assessment.findById(workProposal.assessmentRef)
+  for (const assessmentId of assessmentIds) {
+    const branch = await buildBranchFromAssessment(assessmentId);
+    if (branch) chain.branches.push(branch);
+  }
+
+  if (chain.branches.length > 0) {
+    const b = chain.branches[0];
+    chain.assessment = b.assessment;
+    chain.notesheet = b.notesheet;
+    chain.memo = b.memo;
+    chain.purchaseOrder = b.purchaseOrder;
+  }
+
+  return chain;
+};
+
+/**
+ * Builds a single department branch { department, assessment, notesheet, memo,
+ * purchaseOrder } starting from an assessment id. Returns null if the assessment
+ * no longer exists.
+ */
+const buildBranchFromAssessment = async (assessmentId) => {
+  const assessment = await Assessment.findById(assessmentId)
     .populate('createdBy', 'name role')
     .populate('departmentRef', 'name')
     .populate({ path: 'timeline.actor', select: 'name email role' })
     .lean();
-  if (!assessment) return chain;
+  if (!assessment) return null;
 
-  chain.assessment = {
-    _id: assessment._id,
-    status: assessment.status,
-    estimatedCost: assessment.estimatedCost,
-    feasibilityNotes: assessment.feasibilityNotes,
-    recommendedAction: assessment.recommendedAction,
-    createdBy: assessment.createdBy,
-    departmentRef: assessment.departmentRef,
-    createdAt: assessment.createdAt,
-    timeline: assessment.timeline,
+  const branch = {
+    department: assessment.departmentRef || null,
+    assessment: {
+      _id: assessment._id,
+      status: assessment.status,
+      estimatedCost: assessment.estimatedCost,
+      feasibilityNotes: assessment.feasibilityNotes,
+      recommendedAction: assessment.recommendedAction,
+      items: assessment.items || [],
+      createdBy: assessment.createdBy,
+      departmentRef: assessment.departmentRef,
+      createdAt: assessment.createdAt,
+      timeline: assessment.timeline,
+    },
+    notesheet: null,
+    memo: null,
+    purchaseOrder: null,
   };
 
-  if (!assessment.notesheetRef) return chain;
+  if (!assessment.notesheetRef) return branch;
 
   const notesheet = await Notesheet.findById(assessment.notesheetRef)
     .populate('createdBy', 'name role')
     .populate({ path: 'timeline.actor', select: 'name email role' })
     .lean();
-  if (!notesheet) return chain;
+  if (!notesheet) return branch;
 
-  chain.notesheet = {
+  branch.notesheet = {
     _id: notesheet._id,
     status: notesheet.status,
     quotations: notesheet.quotations,
@@ -321,16 +312,16 @@ const getRequirementChain = async (requirementId, user) => {
     timeline: notesheet.timeline,
   };
 
-  if (!notesheet.memoRef) return chain;
+  if (!notesheet.memoRef) return branch;
 
   const memo = await Memo.findById(notesheet.memoRef)
     .populate('createdBy', 'name role')
     .populate('decidedBy', 'name role')
     .populate({ path: 'timeline.actor', select: 'name email role' })
     .lean();
-  if (!memo) return chain;
+  if (!memo) return branch;
 
-  chain.memo = {
+  branch.memo = {
     _id: memo._id,
     status: memo.status,
     summary: memo.summary,
@@ -343,21 +334,22 @@ const getRequirementChain = async (requirementId, user) => {
     timeline: memo.timeline,
   };
 
-  if (!memo.purchaseOrderRef) return chain;
+  if (!memo.purchaseOrderRef) return branch;
 
   const purchaseOrder = await PurchaseOrder.findById(memo.purchaseOrderRef)
     .populate('createdBy', 'name role')
     .populate('receivedBy', 'name role')
     .lean();
-  if (!purchaseOrder) return chain;
+  if (!purchaseOrder) return branch;
 
-  chain.purchaseOrder = {
+  branch.purchaseOrder = {
     _id: purchaseOrder._id,
     poNumber: purchaseOrder.poNumber,
     status: purchaseOrder.status,
     vendorName: purchaseOrder.vendorName,
     totalAmount: purchaseOrder.totalAmount,
     piAttachmentUrl: purchaseOrder.piAttachmentUrl,
+    stockEntryStatus: purchaseOrder.stockEntryStatus,
     createdBy: purchaseOrder.createdBy,
     receivedBy: purchaseOrder.receivedBy,
     receivedAt: purchaseOrder.receivedAt,
@@ -365,14 +357,13 @@ const getRequirementChain = async (requirementId, user) => {
     timeline: purchaseOrder.timeline,
   };
 
-  return chain;
+  return branch;
 };
 
 module.exports = {
   listRequirements,
   getRequirementById,
   createRequirement,
-  rejectRequirement,
   resubmitRequirement,
   getDashboardStats,
   getRequirementChain,

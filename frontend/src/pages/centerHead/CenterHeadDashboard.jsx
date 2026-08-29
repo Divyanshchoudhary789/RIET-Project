@@ -84,11 +84,11 @@ const CenterHeadDashboard = () => {
             ) : (
               <div className="table-wrap">
                 <table className="table">
-                  <thead><tr><th>Justification</th><th>Priority</th><th>Status</th><th>Date</th></tr></thead>
+                  <thead><tr><th>Description</th><th>Priority</th><th>Status</th><th>Date</th></tr></thead>
                   <tbody>
                     {stats.recent.map((r) => (
                       <tr key={r._id} style={{ cursor: 'pointer' }} onClick={() => navigate('/center-head/requirements')}>
-                        <td style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.justification || '—'}</td>
+                        <td style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.description || r.justification || '—'}</td>
                         <td><span className={`badge badge-${r.priority}`}>{r.priority}</span></td>
                         <td><span className={`badge ${getStatusClass(r.status)}`}>{r.status}</span></td>
                         <td>{formatDate(r.createdAt)}</td>

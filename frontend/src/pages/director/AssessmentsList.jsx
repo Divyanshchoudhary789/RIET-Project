@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Search, Eye, ArrowRight, XCircle, X } from 'lucide-react';
+import { Search, Eye, ArrowRight } from 'lucide-react';
 import api from '../../utils/api';
 import { getErrorMessage, formatDate, getStatusClass, formatCurrency } from '../../utils/helpers';
 import DocumentDetail from '../../components/DocumentDetail';
+import ActionNoteModal from '../../components/ActionNoteModal';
 import useSocketEvent from '../../hooks/useSocketEvent';
 import '../../styles/pages.css';
 
@@ -17,12 +18,8 @@ const AssessmentsList = () => {
   const limit = 15;
   const [selected, setSelected] = useState(null);
 
-  const [rejectTarget, setRejectTarget]   = useState(null);
-  const [rejectNote, setRejectNote]       = useState('');
-  const [rejectLoading, setRejectLoading] = useState(false);
-  const [rejectError, setRejectError]     = useState('');
-
-  const [actionLoading, setActionLoading] = useState({});
+  const [forwardTarget, setForwardTarget] = useState(null);
+  const [forwardLoading, setForwardLoading] = useState(false);
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -48,29 +45,17 @@ const AssessmentsList = () => {
     if (['assessment', 'notesheet'].includes(payload?.entity)) fetch();
   });
 
-  const handleForward = async (assessment) => {
-    setActionLoading((p) => ({ ...p, [`fwd_${assessment._id}`]: true }));
+  const handleForward = async (note) => {
+    if (!forwardTarget) return;
+    setForwardLoading(true);
     try {
-      await api.patch(`/api/assessments/${assessment._id}/forward`);
+      await api.patch(`/api/assessments/${forwardTarget._id}/forward`, { note: note || undefined });
+      setForwardTarget(null);
       fetch();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
-      setActionLoading((p) => ({ ...p, [`fwd_${assessment._id}`]: false }));
-    }
-  };
-
-  const handleReject = async () => {
-    if (!rejectNote.trim()) { setRejectError('A rejection note is required.'); return; }
-    setRejectLoading(true);
-    try {
-      await api.patch(`/api/assessments/${rejectTarget._id}/reject`, { note: rejectNote.trim() });
-      setRejectTarget(null);
-      fetch();
-    } catch (err) {
-      setRejectError(getErrorMessage(err));
-    } finally {
-      setRejectLoading(false);
+      setForwardLoading(false);
     }
   };
 
@@ -132,20 +117,13 @@ const AssessmentsList = () => {
                       <button className="action-btn action-view" onClick={() => setSelected(a)}>
                         <Eye size={13} /> View
                       </button>
-                      {a.status === 'submitted' && (
-                        <>
-                          <button
-                            className="action-btn action-forward"
-                            onClick={() => handleForward(a)}
-                            disabled={actionLoading[`fwd_${a._id}`]}
-                          >
-                            {actionLoading[`fwd_${a._id}`] ? <span className="spinner spinner-sm" /> : <ArrowRight size={13} />}
-                            Forward
-                          </button>
-                          <button className="action-btn action-reject" onClick={() => { setRejectTarget(a); setRejectNote(''); setRejectError(''); }}>
-                            <XCircle size={13} /> Reject
-                          </button>
-                        </>
+                      {(a.status === 'submitted' || a.status === 'revised') && (
+                        <button
+                          className="action-btn action-forward"
+                          onClick={() => setForwardTarget(a)}
+                        >
+                          <ArrowRight size={13} /> Forward
+                        </button>
                       )}
                     </div>
                   </td>
@@ -166,29 +144,16 @@ const AssessmentsList = () => {
 
       <DocumentDetail open={!!selected} onClose={() => setSelected(null)} title="Assessment Detail" document={selected} docType="assessment" />
 
-      {rejectTarget && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <h2 className="modal-title">Reject Assessment</h2>
-              <button className="modal-close" onClick={() => setRejectTarget(null)}><X size={18} /></button>
-            </div>
-            <div className="reject-modal-body">
-              <p className="reject-modal-note">Provide a reason for rejecting this assessment.</p>
-              {rejectError && <div className="alert alert-error">{rejectError}</div>}
-              <div className="form-field">
-                <label className="form-label required">Rejection Note</label>
-                <textarea className="form-textarea" rows={3} placeholder="Enter rejection reason…" value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} autoFocus />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setRejectTarget(null)}>Cancel</button>
-              <button className="btn btn-danger" onClick={handleReject} disabled={rejectLoading}>
-                {rejectLoading ? <><span className="spinner spinner-sm" /> Rejecting…</> : 'Reject'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {forwardTarget && (
+        <ActionNoteModal
+          title="Forward Assessment to PO Office"
+          description="This assessment will be forwarded to the PO Office for vendor quotations. You can add an optional note."
+          confirmLabel="Forward"
+          placeholder="Optional note for the PO Office…"
+          loading={forwardLoading}
+          onConfirm={handleForward}
+          onClose={() => setForwardTarget(null)}
+        />
       )}
     </div>
   );

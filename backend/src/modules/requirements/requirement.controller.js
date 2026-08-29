@@ -28,15 +28,6 @@ const createRequirement = async (req, res, next) => {
   }
 };
 
-const rejectRequirement = async (req, res, next) => {
-  try {
-    const requirement = await requirementService.rejectRequirement(req.params.id, req.body.note, req.user);
-    return sendSuccess(res, 200, 'Requirement rejected.', requirement);
-  } catch (err) {
-    next(err);
-  }
-};
-
 const resubmitRequirement = async (req, res, next) => {
   try {
     const requirement = await requirementService.resubmitRequirement(req.params.id, req.body, req.user);
@@ -68,7 +59,6 @@ module.exports = {
   listRequirements,
   getRequirementById,
   createRequirement,
-  rejectRequirement,
   resubmitRequirement,
   getDashboardStats,
   getRequirementChain,

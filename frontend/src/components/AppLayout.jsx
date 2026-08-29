@@ -83,7 +83,11 @@ const NOTIF_NAV_MAP = {
     const paths = { accounts: '/accounts/memos', chairperson: '/chairperson/memos', director: '/director/memos' };
     return paths[role] || null;
   },
-  PurchaseOrder:  (id) => id ? `/accounts/purchase-orders/${id}` : '/accounts/purchase-orders',
+  PurchaseOrder:  (id, role) => {
+    if (role === 'center_head') return '/center-head/stock';
+    if (role === 'director') return '/director/stock';
+    return id ? `/accounts/purchase-orders/${id}` : '/accounts/purchase-orders';
+  },
 };
 
 const NotificationPanel = ({ onClose, userRole }) => {

@@ -4,7 +4,7 @@ const requirementController = require('./requirement.controller');
 const { authenticate } = require('../../middleware/authenticate');
 const { authorize, requirePasswordChange } = require('../../middleware/authorize');
 const { validate } = require('../../middleware/validate');
-const { createRequirementSchema, rejectSchema } = require('./requirement.validation');
+const { createRequirementSchema } = require('./requirement.validation');
 const { ROLES } = require('../../config/constants');
 
 router.use(authenticate, requirePasswordChange);
@@ -56,13 +56,6 @@ router.post(
   authorize(ROLES.CENTER_HEAD),
   validate(createRequirementSchema),
   requirementController.createRequirement
-);
-
-router.patch(
-  '/:id/reject',
-  authorize(ROLES.CLUSTER_MANAGER),
-  validate(rejectSchema),
-  requirementController.rejectRequirement
 );
 
 router.patch(
