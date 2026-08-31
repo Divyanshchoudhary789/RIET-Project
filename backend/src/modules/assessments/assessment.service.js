@@ -81,8 +81,13 @@ const createAssessment = async (data, departmentAdmin) => {
     error.statusCode = 400;
     throw error;
   }
+  if (!departmentAdmin.scopeRef) {
+    const error = new Error('Your account is not scoped to a department.');
+    error.statusCode = 400;
+    throw error;
+  }
   const deptId = departmentAdmin.scopeRef.toString();
-  const isAssigned = proposal.departmentRefs.map((d) => d.toString()).includes(deptId);
+  const isAssigned = (proposal.departmentRefs || []).map((d) => d.toString()).includes(deptId);
   if (!isAssigned) {
     const error = new Error('This work proposal is not assigned to your department.');
     error.statusCode = 403;
@@ -97,9 +102,9 @@ const createAssessment = async (data, departmentAdmin) => {
   }
 
   // Seed the department's item snapshot from the proposal, unless the admin
-  // submitted their own edited set.
-  const proposalItemsForDept = proposal.items
-    .filter((i) => i.departmentRef.toString() === deptId)
+  // submitted their own edited set. Legacy proposals may have no item snapshot.
+  const proposalItemsForDept = (proposal.items || [])
+    .filter((i) => i.departmentRef && i.departmentRef.toString() === deptId)
     .map((i) => ({
       sourceRequirementRef: i.sourceRequirementRef,
       sourceItemId: i.sourceItemId,

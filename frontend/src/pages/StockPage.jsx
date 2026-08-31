@@ -228,7 +228,9 @@ const StockPage = () => {
   });
 
   useEffect(() => {
-    if (!isGrouped && !CAN_CREATE.includes(role)) return;
+    // Center Head's form is locked to their own campus and they don't get a
+    // location filter — no need to load the campus/department lists.
+    if (role === 'center_head') return;
     Promise.all([
       api.get('/api/campuses?limit=100'),
       api.get('/api/departments?limit=100'),
@@ -238,7 +240,7 @@ const StockPage = () => {
       const dd = dr.data.data;
       setDepartments(Array.isArray(dd) ? dd : (dd?.departments || []));
     }).catch(() => {});
-  }, [isGrouped, role]);
+  }, [role]);
 
   // Org-wide: group Head Office → each Campus → each Department.
   // Campus-scoped multi: group by campus.
@@ -277,25 +279,37 @@ const StockPage = () => {
       setFormError('Item name, category and unit are required.');
       return;
     }
-    const needsCampus = isCenterHead || role === 'department_admin' || form.ownerType === 'campus' || form.ownerType === 'department';
-    if (needsCampus && !isCenterHead && !form.ownerRef) {
-      setFormError('Please select a campus / department.');
-      return;
+
+    const payload = {
+      itemName: form.itemName.trim(),
+      category: form.category.trim(),
+      unit: form.unit.trim(),
+      quantityAvailable: Number(form.quantityAvailable) || 0,
+    };
+
+    if (isCenterHead) {
+      payload.ownerType = 'campus';
+      payload.ownerRef = user?.scopeRef || undefined;
+    } else if (role === 'department_admin') {
+      if (!form.ownerRef) { setFormError('Please select a campus.'); return; }
+      payload.ownerType = 'campus';
+      payload.ownerRef = form.ownerRef;
+      payload.relatedDepartmentRef = user?.scopeRef || undefined;
+    } else {
+      // Org-wide roles
+      payload.ownerType = form.ownerType;
+      if (form.ownerType === 'campus' || form.ownerType === 'department') {
+        if (!form.ownerRef) { setFormError('Please select a campus / department.'); return; }
+        payload.ownerRef = form.ownerRef;
+      }
+      if (form.ownerType === 'campus' && form.relatedDepartmentRef) {
+        payload.relatedDepartmentRef = form.relatedDepartmentRef;
+      }
     }
+
     setSaving(true);
     setFormError('');
     try {
-      const payload = {
-        itemName: form.itemName.trim(),
-        category: form.category.trim(),
-        unit: form.unit.trim(),
-        quantityAvailable: Number(form.quantityAvailable) || 0,
-        ownerType: isCenterHead || role === 'department_admin' ? 'campus' : form.ownerType,
-      };
-      if (payload.ownerType === 'campus' || payload.ownerType === 'department') {
-        if (!isCenterHead) payload.ownerRef = form.ownerRef;
-      }
-      if (form.relatedDepartmentRef) payload.relatedDepartmentRef = form.relatedDepartmentRef;
       await api.post('/api/stock', payload);
       setShowForm(false);
       setForm(defaultForm);

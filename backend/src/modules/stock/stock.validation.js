@@ -18,17 +18,11 @@ const createStockItemSchema = Joi.object({
   }),
   quantityReserved: Joi.number().integer().min(0).default(0),
   reorderThreshold: Joi.number().integer().min(0).default(0),
-  ownerType: Joi.string().valid('campus', 'department', 'headOffice').required().messages({
-    'any.only': 'Owner type must be campus, department, or headOffice.',
-    'any.required': 'Owner type is required.',
-  }),
-  ownerRef: Joi.when('ownerType', {
-    is: Joi.valid('campus', 'department'),
-    then: Joi.string().pattern(objectIdPattern).required().messages({
-      'any.required': 'Owner reference is required for campus or department stock.',
-    }),
-    otherwise: Joi.string().optional().allow(null, ''),
-  }),
+  // Scoped roles (center_head / department_admin) don't send ownerType/ownerRef —
+  // the service derives them from the caller's scope. Org-wide roles do send them,
+  // and the service enforces that ownerRef is present for campus/department stock.
+  ownerType: Joi.string().valid('campus', 'department', 'headOffice').optional(),
+  ownerRef: Joi.string().pattern(objectIdPattern).optional().allow(null, ''),
   relatedDepartmentRef: Joi.string().pattern(objectIdPattern).optional().allow(null, ''),
 });
 

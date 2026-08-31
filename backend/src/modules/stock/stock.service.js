@@ -109,15 +109,37 @@ const createStockItem = async (data, user) => {
   let { ownerType, ownerRef, relatedDepartmentRef } = data;
 
   if (user.role === ROLES.CENTER_HEAD) {
+    // Locked to their own campus — client input for owner is ignored.
+    if (!user.scopeRef) {
+      const error = new Error('Your account is not scoped to a campus.');
+      error.statusCode = 400;
+      throw error;
+    }
     ownerType = 'campus';
     ownerRef = user.scopeRef.toString();
-  }
-  if (user.role === ROLES.DEPARTMENT_ADMIN) {
-    // A department admin can only add campus stock in their own category.
+  } else if (user.role === ROLES.DEPARTMENT_ADMIN) {
+    // Adds campus stock tagged with their own department (category).
+    if (!user.scopeRef) {
+      const error = new Error('Your account is not scoped to a department.');
+      error.statusCode = 400;
+      throw error;
+    }
     ownerType = 'campus';
     relatedDepartmentRef = user.scopeRef.toString();
     if (!ownerRef) {
       const error = new Error('Please select a campus for this stock item.');
+      error.statusCode = 400;
+      throw error;
+    }
+  } else {
+    // Org-wide roles must specify where the stock lives.
+    if (!ownerType) {
+      const error = new Error('Owner type is required.');
+      error.statusCode = 400;
+      throw error;
+    }
+    if ((ownerType === 'campus' || ownerType === 'department') && !ownerRef) {
+      const error = new Error('Owner reference is required for campus or department stock.');
       error.statusCode = 400;
       throw error;
     }
@@ -126,7 +148,12 @@ const createStockItem = async (data, user) => {
   const ownerModel = ownerType === 'campus' ? 'Campus' : ownerType === 'department' ? 'Department' : null;
 
   const item = await StockItem.create({
-    ...data,
+    itemName: data.itemName,
+    category: data.category,
+    unit: data.unit,
+    quantityAvailable: Number(data.quantityAvailable) || 0,
+    quantityReserved: Number(data.quantityReserved) || 0,
+    reorderThreshold: Number(data.reorderThreshold) || 0,
     ownerType,
     ownerRef: ownerType === 'headOffice' ? null : ownerRef,
     ownerModel,
@@ -187,7 +214,7 @@ const fulfilStockReceipt = async (receiptId, entries, user) => {
     error.statusCode = 404;
     throw error;
   }
-  if (user.role === ROLES.CENTER_HEAD && receipt.campusRef.toString() !== user.scopeRef.toString()) {
+  if (user.role === ROLES.CENTER_HEAD && receipt.campusRef.toString() !== user.scopeRef?.toString()) {
     const error = new Error('You can only add stock for your own campus.');
     error.statusCode = 403;
     throw error;

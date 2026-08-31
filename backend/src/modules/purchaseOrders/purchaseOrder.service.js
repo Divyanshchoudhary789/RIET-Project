@@ -329,6 +329,16 @@ const markGoodsReceived = async (orderId, note, receivedByUser) => {
         );
         createdReceipts.push(receipt);
       }
+
+      // Nothing to route to a campus — don't leave the PO stuck "pending" forever.
+      if (createdReceipts.length === 0) {
+        await PurchaseOrder.updateOne(
+          { _id: order._id },
+          { $set: { stockEntryStatus: 'not_required' } },
+          { session }
+        );
+        order.stockEntryStatus = 'not_required';
+      }
     });
   } finally {
     await session.endSession();
